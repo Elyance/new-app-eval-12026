@@ -1,0 +1,68 @@
+/* Reset & Styles de Base */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f9fafb;
+  color: #1f2937;
+}
+
+button {
+  transition: all 0.3s ease-out;
+}
+
+/* Classes utilitaires réutilisables */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #2563eb;
+  color: white;
+  border-radius: 8px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-primary:active {
+  transform: scale(0.95);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+  border-radius: 8px;
+  font-weight: 500;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
