@@ -23,7 +23,7 @@ const handleLogin = () => {
 
 const handleCart = () => {
   console.log('Afficher le panier')
-  // API integration point: navigate to cart or open sidebar
+  // Naviguer vers le panier avec router-link
 }
 
 const handleContact = () => {
@@ -90,14 +90,10 @@ const toggleMobileMenu = () => {
           </button>
 
           <!-- Panier -->
-          <button 
-            class="action-button cart-button"
-            @click="handleCart"
-            title="Voir le panier"
-          >
+          <router-link to="/fo/panier" class="action-button cart-button">
             <span class="label">Panier</span>
             <span class="badge">1</span>
-          </button>
+          </router-link>
         </div>
       </div>
     </div>
