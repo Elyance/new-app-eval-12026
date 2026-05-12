@@ -1,32 +1,30 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { getProductDetail } from '../../services/productService'
 import '../../styles/product-detail.css'
 
 const route = useRoute()
 
-// Mock data - sera remplacé par API PrestaShop
-const productDetail = ref({
-  id: route.params.id || 1,
-  name: 'T-Shirt Classique Premium',
-  price: 29.99,
-  originalPrice: 39.99,
-  rating: 4.5,
-  reviews: 128,
-  description: 'T-shirt de haute qualité en coton 100% biologique. Confortable et durable, idéal pour tous les jours. Coupe classique qui convient à tous les morphotypes.',
-  stock: 45,
-  images: [
-    'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=600&fit=crop&rotate=5',
-    'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=600&fit=crop&rotate=-5'
-  ],
-  sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
-  colors: [
-    { name: 'Noir', hex: '#1f2937' },
-    { name: 'Blanc', hex: '#ffffff' },
-    { name: 'Gris', hex: '#9ca3af' },
-    { name: 'Bleu', hex: '#3b82f6' }
-  ]
+// État du produit
+const productDetail = ref(null)
+const isLoading = ref(true)
+const error = ref(null)
+
+// Charger le produit au montage
+onMounted(async () => {
+  try {
+    isLoading.value = true
+    error.value = null
+    const productId = route.params.id
+    productDetail.value = await getProductDetail(productId)
+  } catch (err) {
+    console.error('Erreur:', err)
+    error.value = err.message || 'Impossible de charger le produit'
+    productDetail.value = null
+  } finally {
+    isLoading.value = false
+  }
 })
 
 // État du formulaire
@@ -70,86 +68,100 @@ const increaseQuantity = () => {
 
 <template>
   <div class="product-detail-page">
-    <div class="breadcrumb">
-      <router-link to="/fo">Accueil</router-link>
-      <span>/</span>
-      <router-link to="/fo/produits">Produits</router-link>
-      <span>/</span>
-      <span>{{ productDetail.name }}</span>
+    <!-- État de chargement -->
+    <div v-if="isLoading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Chargement du produit...</p>
     </div>
 
-    <div class="container">
-      <!-- Partie Gauche: Images -->
-      <div class="images-section">
-        <!-- Grande image -->
-        <div class="main-image-container">
-          <img 
-            :src="productDetail.images[selectedImage]" 
-            :alt="productDetail.name"
-            class="main-image"
-          />
-          <span v-if="discountPercentage > 0" class="discount-badge">
-            -{{ discountPercentage }}%
-          </span>
-        </div>
+    <!-- État d'erreur -->
+    <div v-else-if="error" class="error-container">
+      <p class="error-message">{{ error }}</p>
+      <button @click="$router.back()" class="btn-back">Retour</button>
+    </div>
 
-        <!-- Miniatures -->
-        <div class="thumbnails">
-          <button
-            v-for="(image, index) in productDetail.images"
-            :key="index"
-            class="thumbnail"
-            :class="{ active: selectedImage === index }"
-            @click="selectedImage = index"
-          >
-            <img :src="image" :alt="`Miniature ${index + 1}`" />
-          </button>
-        </div>
+    <!-- Contenu du produit -->
+    <div v-else-if="productDetail" class="content">
+      <div class="breadcrumb">
+        <router-link to="/fo">Accueil</router-link>
+        <span>/</span>
+        <router-link to="/fo/produits">Produits</router-link>
+        <span>/</span>
+        <span>{{ productDetail.name }}</span>
       </div>
 
-      <!-- Partie Droite: Informations & Actions -->
-      <div class="info-section">
-        <!-- Nom & Prix -->
-        <div class="header-info">
-          <h1 class="product-name">{{ productDetail.name }}</h1>
-          
-          <div class="price-container">
-            <span class="price">{{ productDetail.price.toFixed(2) }}€</span>
-            <span v-if="productDetail.originalPrice" class="original-price">
-              {{ productDetail.originalPrice.toFixed(2) }}€
+      <div class="container">
+        <!-- Partie Gauche: Images -->
+        <div class="images-section">
+          <!-- Grande image -->
+          <div class="main-image-container">
+            <img 
+              :src="productDetail.images[selectedImage]" 
+              :alt="productDetail.name"
+              class="main-image"
+            />
+            <span v-if="discountPercentage > 0" class="discount-badge">
+              -{{ discountPercentage }}%
             </span>
           </div>
 
-          <!-- Note & Avis -->
-          <div class="rating">
-            <span class="stars">★★★★☆</span>
-            <span class="rating-text">{{ productDetail.rating }}/5 ({{ productDetail.reviews }} avis)</span>
+          <!-- Miniatures -->
+          <div class="thumbnails">
+            <button
+              v-for="(image, index) in productDetail.images"
+              :key="index"
+              class="thumbnail"
+              :class="{ active: selectedImage === index }"
+              @click="selectedImage = index"
+            >
+              <img :src="image" :alt="`Miniature ${index + 1}`" />
+            </button>
           </div>
         </div>
 
-        <!-- Description -->
-        <div class="description">
-          <p>{{ productDetail.description }}</p>
-        </div>
+        <!-- Partie Droite: Informations & Actions -->
+        <div class="info-section">
+          <!-- Nom & Prix -->
+          <div class="header-info">
+            <h1 class="product-name">{{ productDetail.name }}</h1>
+            
+            <div class="price-container">
+              <span class="price">{{ parseFloat(productDetail.price).toFixed(2) }}€</span>
+              <span v-if="productDetail.originalPrice" class="original-price">
+                {{ parseFloat(productDetail.originalPrice).toFixed(2) }}€
+              </span>
+            </div>
 
-        <!-- Disponibilité -->
-        <div class="availability">
-          <span v-if="isInStock" class="in-stock">
-            En stock ({{ productDetail.stock }} articles disponibles)
-          </span>
-          <span v-else class="out-of-stock">
-            Rupture de stock
-          </span>
-        </div>
+            <!-- Note & Avis -->
+            <div class="rating">
+              <span class="stars">★★★★☆</span>
+              <span class="rating-text">{{ productDetail.rating }}/5 ({{ productDetail.reviews }} avis)</span>
+            </div>
+          </div>
 
-        <!-- Sélections -->
-        <div class="selections">
-          <!-- Taille -->
-          <div class="selection-group">
-            <label for="size" class="label">Taille *</label>
-            <div class="size-selector">
-              <button
-                v-for="size in productDetail.sizes"
+          <!-- Description -->
+          <div class="description">
+            <p v-html="productDetail.description"></p>
+          </div>
+
+          <!-- Disponibilité -->
+          <div class="availability">
+            <span v-if="isInStock" class="in-stock">
+              En stock ({{ productDetail.stock }} articles disponibles)
+            </span>
+            <span v-else class="out-of-stock">
+              Rupture de stock
+            </span>
+          </div>
+
+          <!-- Sélections -->
+          <div class="selections">
+            <!-- Taille -->
+            <div class="selection-group">
+              <label for="size" class="label">Taille *</label>
+              <div class="size-selector">
+                <button
+                  v-for="size in productDetail.sizes"
                 :key="size"
                 class="size-btn"
                 :class="{ active: selectedSize === size }"
@@ -205,6 +217,7 @@ const increaseQuantity = () => {
           Ajouter au panier
         </button>
       </div>
+    </div>
     </div>
   </div>
 </template>

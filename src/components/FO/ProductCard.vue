@@ -22,39 +22,37 @@ const handlePreview = () => {
 <template>
   <router-link :to="`/fo/produits/${product.id}`" class="product-card-link">
     <div class="product-card">
-    <!-- Image Container -->
-        <div class="image-container">
-        <img :src="product.image" :alt="product.name" class="product-image" />
+      <!-- Image Container -->
+      <div class="image-container">
+        <img 
+          :src="product.image || 'https://via.placeholder.com/250x250?text=Produit'" 
+          :alt="product.nom" 
+          class="product-image" 
+        />
         
-        <!-- Badges -->
-        <div class="badges" v-if="product.badges.length">
-            <span v-for="badge in product.badges" :key="badge" :class="['badge', `badge-${badge}`]">
-            {{ badge.charAt(0).toUpperCase() + badge.slice(1) }}
-            </span>
-        </div>
-
         <!-- Favorite Button -->
-        <button class="favorite-btn" @click.stop="toggleFavorite" :class="{ active: product.isFavorite }">
-            ♡
+        <button 
+          class="favorite-btn" 
+          @click.stop="toggleFavorite" 
+          :class="{ active: product.isFavorite }"
+        >
+          ♡
         </button>
+      </div>
 
-        <!-- Preview Button (au hover) -->
-        <button class="preview-btn" @click="handlePreview">
-            Voir l'aperçu
-        </button>
-        </div>
-
-    <!-- Info Container -->
-        <div class="info-container">
+      <!-- Info Container -->
+      <div class="info-container">
         <!-- Nom du produit -->
-        <h3 class="product-name">{{ product.name }}</h3>
+        <h3 class="product-name">{{ product.nom }}</h3>
+
+        <!-- Référence -->
+        <p class="product-reference" v-if="product.reference">{{ product.reference }}</p>
 
         <!-- Prix -->
         <div class="price-container">
-            <span class="price">{{ product.price.toFixed(2) }}€</span>
-            <span v-if="product.originalPrice" class="original-price">{{ product.originalPrice.toFixed(2) }}€</span>
+          <span class="price">{{ Number(product.prix).toFixed(2) }}€</span>
         </div>
-        </div>
+      </div>
     </div>
   </router-link>
 </template>

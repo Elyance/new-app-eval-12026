@@ -1,79 +1,33 @@
 <script setup>
+import { ref, onMounted } from 'vue'
 import ProductCard from '../../components/FO/ProductCard.vue'
+import { getProducts } from '../../services/productService'
 import '../../styles/products.css'
 
-const products = [
-  {
-    id: 1,
-    name: 'T-Shirt Classique',
-    price: 29.99,
-    image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop',
-    badges: ['nouveau'],
-    isFavorite: false
-  },
-  {
-    id: 2,
-    name: 'Jeans Premium',
-    price: 79.99,
-    originalPrice: 99.99,
-    image: 'https://images.unsplash.com/photo-1542272604-787c62d465d1?w=400&h=400&fit=crop',
-    badges: ['promo'],
-    isFavorite: false
-  },
-  {
-    id: 3,
-    name: 'Sneakers Modernes',
-    price: 89.99,
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop',
-    badges: [],
-    isFavorite: false
-  },
-  {
-    id: 4,
-    name: 'Veste Élégante',
-    price: 149.99,
-    originalPrice: 179.99,
-    image: 'https://images.unsplash.com/photo-1539533057592-4ee2537260c4?w=400&h=400&fit=crop',
-    badges: ['nouveau', 'promo'],
-    isFavorite: false
-  },
-  {
-    id: 5,
-    name: 'Chemise Blanche',
-    price: 45.99,
-    image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=400&fit=crop',
-    badges: [],
-    isFavorite: false
-  },
-  {
-    id: 6,
-    name: 'Short d\'Été',
-    price: 34.99,
-    originalPrice: 49.99,
-    image: 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?w=400&h=400&fit=crop',
-    badges: ['promo'],
-    isFavorite: false
-  },
-  {
-    id: 7,
-    name: 'Pull Confortable',
-    price: 54.99,
-    image: 'https://images.unsplash.com/photo-1556821552-5c63fe13db2d?w=400&h=400&fit=crop',
-    badges: ['nouveau'],
-    isFavorite: false
-  },
-  {
-    id: 8,
-    name: 'Pantalon Chino',
-    price: 64.99,
-    image: 'https://images.unsplash.com/photo-1473621038790-b3a47bc2b2f5?w=400&h=400&fit=crop',
-    badges: [],
-    isFavorite: false
+const products = ref([])
+const isLoading = ref(false)
+const error = ref(null)
+
+const loadProducts = async () => {
+  isLoading.value = true
+  error.value = null
+  
+  try {
+    products.value = await getProducts()
+  } catch (err) {
+    error.value = err.message || 'Erreur lors du chargement des produits'
+    console.error('Erreur:', err)
+  } finally {
+    isLoading.value = false
   }
-]
+}
+
+onMounted(() => {
+  loadProducts()
+})
 
 const handleToggleFavorite = (productId) => {
-  const product = products.find(p => p.id === productId)
+  const product = products.value.find(p => p.id === productId)
   if (product) {
     product.isFavorite = !product.isFavorite
   }
@@ -81,7 +35,6 @@ const handleToggleFavorite = (productId) => {
 
 const handlePreview = (productId) => {
   console.log('Aperçu du produit:', productId)
-  // API integration point: ouvrir modal ou naviguer vers page détail
 }
 </script>
 
@@ -91,7 +44,25 @@ const handlePreview = (productId) => {
       <h1>Nos Produits</h1>
       <p class="subtitle">Découvrez notre sélection de produits</p>
 
-      <div class="products-grid">
+      <!-- Loading -->
+      <div v-if="isLoading" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Chargement des produits...</p>
+      </div>
+
+      <!-- Error -->
+      <div v-else-if="error" class="error-message">
+        <p>⚠️ {{ error }}</p>
+        <button @click="loadProducts" class="btn-retry">Réessayer</button>
+      </div>
+
+      <!-- Empty -->
+      <div v-else-if="products.length === 0" class="empty-message">
+        <p>Aucun produit disponible</p>
+      </div>
+
+      <!-- Products Grid -->
+      <div v-else class="products-grid">
         <ProductCard
           v-for="product in products"
           :key="product.id"
@@ -134,6 +105,77 @@ h1 {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 24px;
+}
+
+/* Loading State */
+.loading-spinner {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #1f2937;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner p {
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Error State */
+.error-message {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.error-message p {
+  color: #991b1b;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.btn-retry {
+  padding: 10px 20px;
+  background: #1f2937;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-retry:hover {
+  background: #111827;
+  transform: translateY(-2px);
+}
+
+/* Empty State */
+.empty-message {
+  text-align: center;
+  padding: 60px 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+  color: #6b7280;
+}
+
+.empty-message p {
+  margin: 0;
+  font-size: 16px;
 }
 
 @media (max-width: 768px) {

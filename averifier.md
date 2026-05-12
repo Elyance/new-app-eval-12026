@@ -1,0 +1,1 @@
+- les badges comment ca fonctionne
