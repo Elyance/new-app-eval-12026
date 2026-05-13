@@ -168,7 +168,7 @@ const increaseQuantity = () => {
                 {{ basePriceTtc.toFixed(2) }}€
               </span>
               <span class="price">{{ currentPrice.toFixed(2) }}€</span>
-              <span v-if="hasReduction" class="discount-badge">
+              <span v-if="hasReduction" class="price-discount-badge">
                 {{ reductionBadgeLabel }}
               </span>
             </div>
