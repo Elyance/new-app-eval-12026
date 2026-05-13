@@ -50,7 +50,13 @@ const handlePreview = () => {
 
         <!-- Prix -->
         <div class="price-container">
-          <span class="price">{{ Number(product.prix).toFixed(2) }}€</span>
+            <span v-if="product.hasReduction" class="original-price">
+              {{ Number(product.prix_original ?? product.prix).toFixed(2) }}€
+            </span>
+            <span class="price">{{ Number(product.prix).toFixed(2) }}€</span>
+            <span v-if="product.hasReduction" class="discount-badge">
+              {{ product.reductionBadgeLabel }}
+            </span>
         </div>
       </div>
     </div>

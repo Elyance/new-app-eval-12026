@@ -5,7 +5,7 @@ import { getStockAvailability } from './stockService'
 import { getCombinations } from './combinationService'
 import { getProductOptionsStructure } from './productOptionService'
 import { getProductTaxRate } from './taxService'
-import { getSpecificPrices } from './specificPricesService'
+import { getSpecificPrices, getProductPricingDisplay } from './specificPricesService'
 
 /**
  * Récupère la liste des produits depuis PrestaShop
@@ -37,16 +37,24 @@ export async function getProducts() {
       const inStock = await getStockAvailability(item.id)
       const taxRate = await getProductTaxRate(item)
       const priceHt = Number(item.price || 0)
-      // Calcul du prix TTC
       const price = priceHt * (1 + taxRate / 100)
+      const specificPrices = await getSpecificPrices(item.id)
+      const pricingDisplay = getProductPricingDisplay({
+        priceHt,
+        taxRate,
+        specificPrices
+      })
 
       return {
         id: item.id,
         nom: item.name?.language?.['#text'] || 'Sans nom',
         description: item.description_short?.language?.['#text'] || 'Sans description',
-        prix: price,
+        prix: pricingDisplay.finalPrice,
+        prix_original: pricingDisplay.basePriceTtc,
         prix_ht: priceHt,
         tax_rate: taxRate,
+        hasReduction: pricingDisplay.hasReduction,
+        reductionBadgeLabel: pricingDisplay.reductionBadgeLabel,
         image,
         badges,
         inStock,

@@ -135,3 +135,44 @@ export function calculateFinalPrice(priceHt, taxRate, reduction) {
     discountAmount
   }
 }
+
+/**
+ * Prépare toutes les informations d'affichage du prix produit.
+ * @param {object} productDetail - Détail produit complet.
+ * @param {object|null} matchingCombination - Combinaison sélectionnée, si besoin.
+ * @returns {object} Données d'affichage du prix.
+ */
+export function getProductPricingDisplay(productDetail, matchingCombination = null) {
+  const priceHt = Number(matchingCombination?.price || productDetail?.priceHt || productDetail?.price || 0)
+  const taxRate = Number(productDetail?.taxRate || 0)
+  const basePriceTtc = priceHt * (1 + taxRate / 100)
+  const reduction = findBestApplicableReduction(priceHt, productDetail?.specificPrices || [], {
+    combinationId: matchingCombination?.id || 0,
+    taxRate
+  })
+
+  let finalPrice = basePriceTtc
+
+  if (reduction) {
+    if (reduction.reduction_tax === '1') {
+      finalPrice = applyReduction(basePriceTtc, reduction)
+    } else {
+      const reducedHt = applyReduction(priceHt, reduction)
+      finalPrice = reducedHt * (1 + taxRate / 100)
+    }
+  }
+
+  return {
+    priceHt,
+    taxRate,
+    basePriceTtc,
+    finalPrice,
+    hasReduction: Boolean(reduction) && finalPrice < basePriceTtc,
+    reduction,
+    reductionBadgeLabel: reduction
+      ? reduction.reduction_type === 'percentage'
+        ? `-${Math.round(reduction.reduction * 100)}%`
+        : `-${Number(reduction.reduction).toFixed(2)}€`
+      : ''
+  }
+}

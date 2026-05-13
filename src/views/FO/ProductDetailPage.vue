@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProductDetail } from '../../services/productService'
-import { findBestApplicableReduction, applyReduction } from '../../services/specificPricesService'
+import { getProductPricingDisplay } from '../../services/specificPricesService'
 import '../../styles/product-detail.css'
 
 const route = useRoute()
@@ -50,68 +50,12 @@ const matchingCombination = computed(() => {
   }) || null
 })
 
-const basePriceHt = computed(() => Number(matchingCombination.value?.price || productDetail.value?.priceHt || productDetail.value?.price || 0))
+const pricingDisplay = computed(() => getProductPricingDisplay(productDetail.value, matchingCombination.value))
 
-const basePriceTtc = computed(() => {
-  const taxRate = Number(productDetail.value?.taxRate || 0)
-  return basePriceHt.value * (1 + taxRate / 100)
-})
-
-const applicableReduction = computed(() => {
-  const taxRate = Number(productDetail.value?.taxRate || 0)
-
-  return findBestApplicableReduction(
-    basePriceHt.value,
-    productDetail.value?.specificPrices || [],
-    {
-      combinationId: matchingCombination.value?.id || 0,
-      taxRate
-    }
-  )
-})
-
-const currentPrice = computed(() => {
-  const priceTTC = basePriceTtc.value
-  const priceHt = basePriceHt.value
-  let finalPrice = priceTTC
-
-  if (applicableReduction.value) {
-    // Appliquer la réduction
-    if (applicableReduction.value.reduction_tax === '1') {
-      // Réduction appliquée sur TTC
-      finalPrice = applyReduction(priceTTC, applicableReduction.value)
-    } else {
-      // Réduction appliquée sur HT, puis recalculer TTC
-      const reducedHt = applyReduction(priceHt, applicableReduction.value)
-      const taxRate = Number(productDetail.value?.taxRate || 0)
-      finalPrice = reducedHt * (1 + taxRate / 100)
-    }
-
-    console.log('[pricing] réduction appliquée au produit', {
-      priceTTC,
-      reduction_type: applicableReduction.value.reduction_type,
-      reduction: applicableReduction.value.reduction,
-      reduction_tax: applicableReduction.value.reduction_tax,
-      finalPrice,
-      discount: priceTTC - finalPrice
-    })
-  }
-
-  return finalPrice
-})
-
-const hasReduction = computed(() => Number(currentPrice.value) < Number(basePriceTtc.value))
-
-const reductionBadgeLabel = computed(() => {
-  const reduction = applicableReduction.value
-  if (!reduction) return ''
-
-  if (reduction.reduction_type === 'percentage') {
-    return `-${Math.round(reduction.reduction * 100)}%`
-  }
-
-  return `-${Number(reduction.reduction).toFixed(2)}€`
-})
+const basePriceTtc = computed(() => pricingDisplay.value.basePriceTtc)
+const currentPrice = computed(() => pricingDisplay.value.finalPrice)
+const hasReduction = computed(() => pricingDisplay.value.hasReduction)
+const reductionBadgeLabel = computed(() => pricingDisplay.value.reductionBadgeLabel)
 
 const displayImage = computed(() => {
   return matchingCombination.value?.image || productDetail.value?.image || ''
