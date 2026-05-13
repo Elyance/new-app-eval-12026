@@ -1,11 +1,7 @@
 import { xmlToJson } from '../utils/xmlParser'
 import { API_URL } from '../constants/constant'
 
-/**
- * Récupère toutes les réductions (specific_prices) pour un produit
- * @param {string|number} productId - ID du produit
- * @returns {Promise<Array>} Liste des réductions formatée
- */
+
 export async function getSpecificPrices(productId) {
   try {
     const response = await fetch(`${API_URL}/specific_prices?filter[id_product]=${productId}&display=full`)
@@ -34,13 +30,6 @@ export async function getSpecificPrices(productId) {
   }
 }
 
-/**
- * Trouve la réduction simple applicable
- * @param {number} priceHt - Prix HT de base
- * @param {Array} specificPrices - Liste des réductions disponibles
- * @param {object} context - Contexte d'application {combinationId, taxRate}
- * @returns {object|null} Meilleure réduction applicable ou null
- */
 export function findBestApplicableReduction(priceHt, specificPrices, context = {}) {
   if (!specificPrices || specificPrices.length === 0) return null
 
@@ -70,12 +59,6 @@ export function findBestApplicableReduction(priceHt, specificPrices, context = {
   return applicableReductions[0]
 }
 
-/**
- * Applique une réduction sur un prix
- * @param {number} price - Prix de base (HT ou TTC selon reduction_tax)
- * @param {object} reduction - Objet réduction {reduction, reduction_type}
- * @returns {number} Prix après réduction
- */
 export function applyReduction(price, reduction) {
   if (!reduction) return price
 
@@ -87,13 +70,6 @@ export function applyReduction(price, reduction) {
   }
 }
 
-/**
- * Calcule le prix final avec réduction appliquée
- * @param {number} priceHt - Prix HT de base
- * @param {number} taxRate - Taux de TVA (ex: 20 pour 20%)
- * @param {object} reduction - Réduction applicable (ou null)
- * @returns {object} {priceHt, priceTTC, reducedPrice, discount, discountAmount}
- */
 export function calculateFinalPrice(priceHt, taxRate, reduction) {
   const priceTTC = priceHt * (1 + taxRate / 100)
 
@@ -136,12 +112,7 @@ export function calculateFinalPrice(priceHt, taxRate, reduction) {
   }
 }
 
-/**
- * Prépare toutes les informations d'affichage du prix produit.
- * @param {object} productDetail - Détail produit complet.
- * @param {object|null} matchingCombination - Combinaison sélectionnée, si besoin.
- * @returns {object} Données d'affichage du prix.
- */
+// pour eviter les codes non necessaires dans les vue
 export function getProductPricingDisplay(productDetail, matchingCombination = null) {
   const priceHt = Number(matchingCombination?.price || productDetail?.priceHt || productDetail?.price || 0)
   const taxRate = Number(productDetail?.taxRate || 0)
