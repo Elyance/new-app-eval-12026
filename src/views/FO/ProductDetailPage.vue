@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProductDetail } from '../../services/productService'
+import { findBestApplicableReduction, applyReduction } from '../../services/specificPricesService'
 import '../../styles/product-detail.css'
 
 const route = useRoute()
@@ -29,14 +30,91 @@ onMounted(async () => {
 
 // État du formulaire
 const quantity = ref(1)
-const currentPrice = computed(() => productDetail.value?.price || 0)
 const selectedOptions = ref({})
 
 const productOptions = computed(() => productDetail.value?.productOptions || [])
 const hasProductOptions = computed(() => productOptions.value.length > 0)
 
+const selectedOptionValueIds = computed(() => {
+  return Object.values(selectedOptions.value)
+    .map(value => Number(value))
+    .filter(Number.isFinite)
+})
+
+const matchingCombination = computed(() => {
+  if (!selectedOptionValueIds.value.length) return null
+
+  return productDetail.value?.combinations?.find((combination) => {
+    const combinationOptionIds = combination.optionValueIds || []
+    return selectedOptionValueIds.value.every((selectedId) => combinationOptionIds.includes(selectedId))
+  }) || null
+})
+
+const basePriceHt = computed(() => Number(matchingCombination.value?.price || productDetail.value?.priceHt || productDetail.value?.price || 0))
+
+const basePriceTtc = computed(() => {
+  const taxRate = Number(productDetail.value?.taxRate || 0)
+  return basePriceHt.value * (1 + taxRate / 100)
+})
+
+const applicableReduction = computed(() => {
+  const taxRate = Number(productDetail.value?.taxRate || 0)
+
+  return findBestApplicableReduction(
+    basePriceHt.value,
+    productDetail.value?.specificPrices || [],
+    {
+      combinationId: matchingCombination.value?.id || 0,
+      taxRate
+    }
+  )
+})
+
+const currentPrice = computed(() => {
+  const priceTTC = basePriceTtc.value
+  const priceHt = basePriceHt.value
+  let finalPrice = priceTTC
+
+  if (applicableReduction.value) {
+    // Appliquer la réduction
+    if (applicableReduction.value.reduction_tax === '1') {
+      // Réduction appliquée sur TTC
+      finalPrice = applyReduction(priceTTC, applicableReduction.value)
+    } else {
+      // Réduction appliquée sur HT, puis recalculer TTC
+      const reducedHt = applyReduction(priceHt, applicableReduction.value)
+      const taxRate = Number(productDetail.value?.taxRate || 0)
+      finalPrice = reducedHt * (1 + taxRate / 100)
+    }
+
+    console.log('[pricing] réduction appliquée au produit', {
+      priceTTC,
+      reduction_type: applicableReduction.value.reduction_type,
+      reduction: applicableReduction.value.reduction,
+      reduction_tax: applicableReduction.value.reduction_tax,
+      finalPrice,
+      discount: priceTTC - finalPrice
+    })
+  }
+
+  return finalPrice
+})
+
+const hasReduction = computed(() => Number(currentPrice.value) < Number(basePriceTtc.value))
+
+const reductionBadgeLabel = computed(() => {
+  const reduction = applicableReduction.value
+  if (!reduction) return ''
+
+  if (reduction.reduction_type === 'percentage') {
+    return `-${Math.round(reduction.reduction * 100)}%`
+  }
+
+  return `-${Number(reduction.reduction).toFixed(2)}€`
+})
+
 const displayImage = computed(() => {
-  return productDetail.value?.image || ''
+  return matchingCombination.value?.image || productDetail.value?.image || ''
 })
 
 const isInStock = computed(() => {
@@ -64,7 +142,8 @@ const handleAddToCart = () => {
     name: productDetail.value.name,
     quantity: quantity.value,
     price: currentPrice.value,
-    options: selectedOptions.value
+    options: selectedOptions.value,
+    matchingCombination: matchingCombination.value
   })
   alert('Produit ajouté au panier !')
 }
@@ -141,9 +220,12 @@ const increaseQuantity = () => {
             <h1 class="product-name">{{ productDetail.name }}</h1>
             
             <div class="price-container">
+              <span v-if="hasReduction" class="original-price">
+                {{ basePriceTtc.toFixed(2) }}€
+              </span>
               <span class="price">{{ currentPrice.toFixed(2) }}€</span>
-              <span v-if="productDetail.originalPrice" class="original-price">
-                {{ parseFloat(productDetail.originalPrice).toFixed(2) }}€
+              <span v-if="hasReduction" class="discount-badge">
+                {{ reductionBadgeLabel }}
               </span>
             </div>
 
