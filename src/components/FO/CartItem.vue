@@ -43,16 +43,6 @@ const increaseQuantity = () => {
     <!-- Infos Produit -->
     <div class="item-info">
       <h3 class="item-name">{{ item.name }}</h3>
-      
-      <!-- Attributs -->
-      <div class="item-attributes">
-        <span v-if="item.size" class="attribute">
-          <strong>Taille:</strong> {{ item.size }}
-        </span>
-        <span v-if="item.color" class="attribute">
-          <strong>Couleur:</strong> {{ item.color }}
-        </span>
-      </div>
 
       <!-- Prix unitaire -->
       <div class="item-price">

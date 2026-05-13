@@ -11,8 +11,6 @@ const cartItems = ref([
     name: 'T-Shirt Classique Premium',
     price: 29.99,
     quantity: 2,
-    size: 'M',
-    color: 'Noir',
     image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=100&h=100&fit=crop'
   },
   {
@@ -20,8 +18,6 @@ const cartItems = ref([
     name: 'Jeans Premium',
     price: 79.99,
     quantity: 1,
-    size: 'L',
-    color: 'Bleu',
     image: 'https://images.unsplash.com/photo-1542272604-787c62d465d1?w=100&h=100&fit=crop'
   },
   {
@@ -29,8 +25,6 @@ const cartItems = ref([
     name: 'Chemise Blanche',
     price: 45.99,
     quantity: 1,
-    size: 'S',
-    color: 'Blanc',
     image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=100&h=100&fit=crop'
   }
 ])

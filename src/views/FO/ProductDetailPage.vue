@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProductDetail } from '../../services/productService'
 import '../../styles/product-detail.css'
@@ -28,33 +28,64 @@ onMounted(async () => {
 })
 
 // État du formulaire
-const selectedImage = ref(0)
-const selectedSize = ref('')
-const selectedColor = ref('')
 const quantity = ref(1)
+const currentPrice = computed(() => productDetail.value?.price || 0)
+const selectedOptions = ref({})
 
-const isInStock = computed(() => productDetail.value.stock > 0)
-const discountPercentage = computed(() => {
-  if (productDetail.value.originalPrice) {
-    return Math.round((1 - productDetail.value.price / productDetail.value.originalPrice) * 100)
-  }
-  return 0
+const productOptions = computed(() => productDetail.value?.productOptions || [])
+const hasProductOptions = computed(() => productOptions.value.length > 0)
+
+const displayImage = computed(() => {
+  return productDetail.value?.image || ''
 })
 
-const handleAddToCart = () => {
-  if (!selectedSize.value || !selectedColor.value) {
-    alert('Veuillez sélectionner une taille et une couleur')
-    return
+const isInStock = computed(() => {
+  return productDetail.value?.inStock || false
+})
+
+watch(() => productDetail.value, () => {
+  if (productDetail.value) {
+    // Aucun calcul d'option: on se contente du prix de base.
+    selectedOptions.value = {}
   }
+}, { immediate: false })
+
+const handleAddToCart = () => {
+  if (hasProductOptions.value) {
+    const missingOption = productOptions.value.find(group => !selectedOptions.value[group.id])
+    if (missingOption) {
+      alert(`Veuillez sélectionner ${missingOption.nom.toLowerCase()}`)
+      return
+    }
+  }
+
   console.log('Produit ajouté au panier:', {
     id: productDetail.value.id,
     name: productDetail.value.name,
-    size: selectedSize.value,
-    color: selectedColor.value,
     quantity: quantity.value,
-    price: productDetail.value.price
+    price: currentPrice.value,
+    options: selectedOptions.value
   })
   alert('Produit ajouté au panier !')
+}
+
+const isColorGroup = (group) => String(group?.type || '').toLowerCase() === 'color'
+
+const isOptionSelected = (groupId, valueId) => selectedOptions.value[groupId] === valueId
+
+const selectOptionValue = (groupId, valueId) => {
+  selectedOptions.value = {
+    ...selectedOptions.value,
+    [groupId]: valueId
+  }
+}
+
+const getSelectedOptionLabel = (groupId) => {
+  const group = productOptions.value.find(optionGroup => optionGroup.id === groupId)
+  const selectedValueId = selectedOptions.value[groupId]
+  const selectedValue = group?.valeurs?.find(value => value.id === selectedValueId)
+
+  return selectedValue?.nom || ''
 }
 
 const decreaseQuantity = () => {
@@ -62,7 +93,7 @@ const decreaseQuantity = () => {
 }
 
 const increaseQuantity = () => {
-  if (quantity.value < productDetail.value.stock) quantity.value++
+  quantity.value++
 }
 </script>
 
@@ -96,26 +127,10 @@ const increaseQuantity = () => {
           <!-- Grande image -->
           <div class="main-image-container">
             <img 
-              :src="productDetail.images[selectedImage]" 
+              :src="displayImage" 
               :alt="productDetail.name"
               class="main-image"
             />
-            <span v-if="discountPercentage > 0" class="discount-badge">
-              -{{ discountPercentage }}%
-            </span>
-          </div>
-
-          <!-- Miniatures -->
-          <div class="thumbnails">
-            <button
-              v-for="(image, index) in productDetail.images"
-              :key="index"
-              class="thumbnail"
-              :class="{ active: selectedImage === index }"
-              @click="selectedImage = index"
-            >
-              <img :src="image" :alt="`Miniature ${index + 1}`" />
-            </button>
           </div>
         </div>
 
@@ -126,17 +141,12 @@ const increaseQuantity = () => {
             <h1 class="product-name">{{ productDetail.name }}</h1>
             
             <div class="price-container">
-              <span class="price">{{ parseFloat(productDetail.price).toFixed(2) }}€</span>
+              <span class="price">{{ currentPrice.toFixed(2) }}€</span>
               <span v-if="productDetail.originalPrice" class="original-price">
                 {{ parseFloat(productDetail.originalPrice).toFixed(2) }}€
               </span>
             </div>
 
-            <!-- Note & Avis -->
-            <div class="rating">
-              <span class="stars">★★★★☆</span>
-              <span class="rating-text">{{ productDetail.rating }}/5 ({{ productDetail.reviews }} avis)</span>
-            </div>
           </div>
 
           <!-- Description -->
@@ -147,7 +157,7 @@ const increaseQuantity = () => {
           <!-- Disponibilité -->
           <div class="availability">
             <span v-if="isInStock" class="in-stock">
-              En stock ({{ productDetail.stock }} articles disponibles)
+              En stock
             </span>
             <span v-else class="out-of-stock">
               Rupture de stock
@@ -155,40 +165,44 @@ const increaseQuantity = () => {
           </div>
 
           <!-- Sélections -->
-          <div class="selections">
-            <!-- Taille -->
-            <div class="selection-group">
-              <label for="size" class="label">Taille *</label>
-              <div class="size-selector">
-                <button
-                  v-for="size in productDetail.sizes"
-                :key="size"
-                class="size-btn"
-                :class="{ active: selectedSize === size }"
-                @click="selectedSize = size"
-              >
-                {{ size }}
-              </button>
-            </div>
-          </div>
+          <div v-if="hasProductOptions" class="selections">
+            <div
+              v-for="group in productOptions"
+              :key="group.id"
+              class="selection-group"
+            >
+              <label class="label">{{ group.nom }}</label>
 
-          <!-- Couleur -->
-          <div class="selection-group">
-            <label for="color" class="label">Couleur *</label>
-            <div class="color-selector">
-              <button
-                v-for="color in productDetail.colors"
-                :key="color.name"
-                class="color-btn"
-                :class="{ active: selectedColor === color.name }"
-                :style="{ borderColor: selectedColor === color.name ? '#1f2937' : '#e5e7eb' }"
-                @click="selectedColor = color.name"
-                :title="color.name"
-              >
-                <span class="color-dot" :style="{ backgroundColor: color.hex }"></span>
-              </button>
+              <div v-if="isColorGroup(group)" class="color-selector">
+                <button
+                  v-for="value in group.valeurs"
+                  :key="value.id"
+                  class="color-btn"
+                  :class="{ active: isOptionSelected(group.id, value.id) }"
+                  :style="{ borderColor: isOptionSelected(group.id, value.id) ? '#1f2937' : '#e5e7eb' }"
+                  :title="value.nom"
+                  @click="selectOptionValue(group.id, value.id)"
+                >
+                  <span class="color-dot" :style="{ backgroundColor: value.color || '#9ca3af' }"></span>
+                </button>
+              </div>
+
+              <div v-else class="size-selector">
+                <button
+                  v-for="value in group.valeurs"
+                  :key="value.id"
+                  class="size-btn"
+                  :class="{ active: isOptionSelected(group.id, value.id) }"
+                  @click="selectOptionValue(group.id, value.id)"
+                >
+                  {{ value.nom }}
+                </button>
+              </div>
+
+              <p v-if="getSelectedOptionLabel(group.id)" class="color-label">
+                {{ getSelectedOptionLabel(group.id) }}
+              </p>
             </div>
-            <p v-if="selectedColor" class="color-label">{{ selectedColor }}</p>
           </div>
 
           <!-- Quantité -->
@@ -201,7 +215,6 @@ const increaseQuantity = () => {
                 type="number" 
                 class="qty-input"
                 min="1"
-                :max="productDetail.stock"
               />
               <button class="qty-btn" @click="increaseQuantity">+</button>
             </div>
@@ -217,7 +230,6 @@ const increaseQuantity = () => {
           Ajouter au panier
         </button>
       </div>
-    </div>
     </div>
   </div>
 </template>
