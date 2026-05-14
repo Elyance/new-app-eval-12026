@@ -10,6 +10,7 @@ import {
   removeProductFromCart
 } from '../../services/cartService'
 import { getProductDetail } from '../../services/productService'
+import { getProductPricingDisplay } from '../../services/specificPricesService'
 import { API_URL } from '../../constants/constant'
 import { cartStore } from '../../stores/cartStore'
 import '../../styles/cart.css'
@@ -49,13 +50,17 @@ const loadCart = async () => {
       cart.rows.map(async (row) => {
         try {
           const product = await getProductDetail(row.id_product)
-          const imageId = product?.image ? '' : ''
+          // Calculer le prix final en tenant compte des promotions
+          const pricing = getProductPricingDisplay(product)
 
           return {
             id: row.id_product,
             id_product_attribute: row.id_product_attribute,
             name: product?.name || `Produit #${row.id_product}`,
-            price: product?.price || 0,
+            price: pricing.finalPrice,
+            originalPrice: pricing.basePriceTtc,
+            hasReduction: pricing.hasReduction,
+            reductionLabel: pricing.reductionBadgeLabel,
             quantity: row.quantity,
             image: product?.image || ''
           }
@@ -67,6 +72,9 @@ const loadCart = async () => {
             id_product_attribute: row.id_product_attribute,
             name: `Produit #${row.id_product}`,
             price: 0,
+            originalPrice: 0,
+            hasReduction: false,
+            reductionLabel: '',
             quantity: row.quantity,
             image: ''
           }

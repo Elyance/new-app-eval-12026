@@ -49,7 +49,13 @@ const increaseQuantity = () => {
 
       <!-- Prix unitaire -->
       <div class="item-price">
+        <span v-if="item.hasReduction" class="item-original-price">
+          {{ item.originalPrice.toFixed(2) }}€
+        </span>
         {{ item.price.toFixed(2) }}€
+        <span v-if="item.hasReduction" class="item-reduction-badge">
+          {{ item.reductionLabel }}
+        </span>
       </div>
     </div>
 
