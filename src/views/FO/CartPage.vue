@@ -144,8 +144,7 @@ const handleContinueShopping = () => {
 }
 
 const handleCheckout = () => {
-  console.log('Passer la commande')
-  // Naviguer vers la page paiement/commande
+  router.push('/fo/commande')
 }
 </script>
 

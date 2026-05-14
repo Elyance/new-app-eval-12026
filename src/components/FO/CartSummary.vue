@@ -10,7 +10,7 @@ const props = defineProps({
 
 const emit = defineEmits(['checkout'])
 
-const SHIPPING_COST = 5.99
+
 
 const totalItems = computed(() => {
   return props.items.reduce((sum, item) => sum + item.quantity, 0)
@@ -21,7 +21,7 @@ const subtotal = computed(() => {
 })
 
 const total = computed(() => {
-  return (parseFloat(subtotal.value) + SHIPPING_COST).toFixed(2)
+  return parseFloat(subtotal.value).toFixed(2)
 })
 
 const handleCheckout = () => {
@@ -49,11 +49,7 @@ const handleContinueShopping = () => {
       <strong>{{ subtotal }}€</strong>
     </div>
 
-    <!-- Livraison -->
-    <div class="summary-row">
-      <span>Frais de livraison:</span>
-      <strong>{{ SHIPPING_COST.toFixed(2) }}€</strong>
-    </div>
+
 
     <!-- Divider -->
     <div class="divider"></div>
