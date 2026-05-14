@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getProductDetail } from '../../services/productService'
 import { getProductPricingDisplay } from '../../services/specificPricesService'
+import { createCart, addProductToCart, getIdCartInSessionStorage } from '../../services/cartService'
+import { cartStore } from '../../stores/cartStore'
 import '../../styles/product-detail.css'
 
 const route = useRoute()
@@ -11,6 +13,7 @@ const route = useRoute()
 const productDetail = ref(null)
 const isLoading = ref(true)
 const error = ref(null)
+const isAddingToCart = ref(false)
 
 // Charger le produit au montage
 onMounted(async () => {
@@ -72,7 +75,8 @@ watch(() => productDetail.value, () => {
   }
 }, { immediate: false })
 
-const handleAddToCart = () => {
+const handleAddToCart = async () => {
+  // pour les couleurs et la taille, il doit choisir
   if (hasProductOptions.value) {
     const missingOption = productOptions.value.find(group => !selectedOptions.value[group.id])
     if (missingOption) {
@@ -81,15 +85,49 @@ const handleAddToCart = () => {
     }
   }
 
-  console.log('Produit ajouté au panier:', {
-    id: productDetail.value.id,
-    name: productDetail.value.name,
-    quantity: quantity.value,
-    price: currentPrice.value,
-    options: selectedOptions.value,
-    matchingCombination: matchingCombination.value
-  })
-  alert('Produit ajouté au panier !')
+  isAddingToCart.value = true
+
+  try {
+    // Données du produit à ajouter
+    const productData = {
+      id_product: productDetail.value.id,
+      id_product_attribute: matchingCombination.value?.id || 0,
+      quantity: quantity.value
+    }
+
+    const existingCartId = getIdCartInSessionStorage()
+
+    if (existingCartId === null) {
+      // Pas de panier en session → on crée un nouveau panier avec ce produit
+      console.log('Création d\'un nouveau panier avec le produit:', productData)
+      const newCart = await createCart(productData)
+
+      if (newCart && newCart.id) {
+        console.log('Panier créé avec succès, ID:', newCart.id)
+        await cartStore.refreshCount()
+        alert('Produit ajouté au panier !')
+      } else {
+        alert('Erreur lors de la création du panier.')
+      }
+    } else {
+      // Panier existant → on ajoute le produit
+      console.log('Ajout au panier existant ID:', existingCartId, 'Produit:', productData)
+      const updatedCart = await addProductToCart(existingCartId, productData)
+
+      if (updatedCart) {
+        console.log('Produit ajouté au panier avec succès')
+        await cartStore.refreshCount()
+        alert('Produit ajouté au panier !')
+      } else {
+        alert('Erreur lors de l\'ajout au panier.')
+      }
+    }
+  } catch (err) {
+    console.error('Erreur handleAddToCart:', err)
+    alert('Une erreur est survenue lors de l\'ajout au panier.')
+  } finally {
+    isAddingToCart.value = false
+  }
 }
 
 const isColorGroup = (group) => String(group?.type || '').toLowerCase() === 'color'
@@ -251,9 +289,9 @@ const increaseQuantity = () => {
         <button 
           class="add-to-cart-btn"
           @click="handleAddToCart"
-          :disabled="!isInStock"
+          :disabled="!isInStock || isAddingToCart"
         >
-          Ajouter au panier
+          {{ isAddingToCart ? 'Ajout en cours...' : 'Ajouter au panier' }}
         </button>
       </div>
     </div>

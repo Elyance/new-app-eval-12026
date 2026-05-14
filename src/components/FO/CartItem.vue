@@ -25,6 +25,9 @@ const handleQuantityChange = (newQuantity) => {
 const decreaseQuantity = () => {
   if (props.item.quantity > 1) {
     handleQuantityChange(props.item.quantity - 1)
+  } else if (props.item.quantity === 1) {
+    // Si la quantité est à 1 et que l'utilisateur veut la diminuer, on peut soit empêcher, soit supprimer l'article
+    handleRemove()
   }
 }
 

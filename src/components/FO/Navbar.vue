@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { cartStore } from '../../stores/cartStore'
 import '../../styles/navbar.css'
 
 const searchQuery = ref('')
@@ -10,6 +11,11 @@ const categories = [
   { id: 2, name: 'Accessoires' },
   { id: 3, name: 'Art' }
 ]
+
+// Charger le compteur du panier au montage
+onMounted(() => {
+  cartStore.refreshCount()
+})
 
 const handleSearch = () => {
   console.log('Recherche pour:', searchQuery.value)
@@ -92,7 +98,7 @@ const toggleMobileMenu = () => {
           <!-- Panier -->
           <router-link to="/fo/panier" class="action-button cart-button">
             <span class="label">Panier</span>
-            <span class="badge">1</span>
+            <span v-if="cartStore.itemCount > 0" class="badge">{{ cartStore.itemCount }}</span>
           </router-link>
         </div>
       </div>
