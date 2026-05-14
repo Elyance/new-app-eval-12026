@@ -231,12 +231,20 @@ export async function addProductToCart(cartId, productData) {
       }
     }
 
-    // Sinon -> on insere le nouveau produit dans la liste des cart_rows (un seul cart_row)
-    const cartRow = {
-      id_product: productData.id_product,
-      id_product_attribute: productData.id_product_attribute || 0,
-      quantity: productData.quantity || 1
-    }
+    // Sinon -> on insère le nouveau produit dans la liste des cart_rows
+    // PUT = remplacement complet, il faut renvoyer TOUTES les lignes existantes + la nouvelle
+    const allRows = [
+      ...currentCart.rows.map((row) => ({
+        id_product: row.id_product,
+        id_product_attribute: row.id_product_attribute,
+        quantity: row.quantity
+      })),
+      {
+        id_product: productData.id_product,
+        id_product_attribute: productData.id_product_attribute || 0,
+        quantity: productData.quantity || 1
+      }
+    ]
 
     const cartData = {
       id: cartId,
@@ -244,7 +252,7 @@ export async function addProductToCart(cartId, productData) {
       id_lang: currentCart.id_lang,
       associations: {
         cart_rows: {
-          cart_row: cartRow
+          cart_row: allRows
         }
       }
     }
@@ -387,19 +395,16 @@ export async function removeProductFromCart(cartId, idProduct, idProductAttribut
       quantity: row.quantity
     }))
 
-    // 4. Construire le XML complet (PUT = objet entier)
+    // 4. Construire le XML complet (PUT = objet entier avec TOUTES les lignes restantes)
     const cartData = {
       id: cartId,
       id_currency: currentCart.id_currency,
       id_lang: currentCart.id_lang,
-      // si updatedRows est vide, on n'envoit plus d'associations 
-      ...(cartRowsXml.length > 0 && {
-        associations: {
-          cart_rows: {
-            cart_row: cartRowsXml.length === 1 ? cartRowsXml[0] : cartRowsXml
-          }
+      associations: {
+        cart_rows: {
+          cart_row: cartRowsXml.length === 1 ? cartRowsXml[0] : cartRowsXml
         }
-      })
+      }
     }
 
     const cartXML = jsonToXml(cartData, 'cart')

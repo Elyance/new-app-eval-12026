@@ -1,0 +1,11 @@
+COMMANDES:
+    - ajouter la personne qui a achete : POST /api/guests -> POST /api/addresses -> GET /api/carriers POST /api/orders 
+        - formulaire pour la personne (prenom, nom, adresse, code postale(format 99999), ville, pays(SELECT -> GET /api/countries?display=full -> get id_country)) 
+        - mode de livraison : definit id_carrier = 1 (par defaut )
+        - mode de paiement -> module = 'ps_cashondelivery' (par defaut)
+
+    note : il faut quand meme afficher les champs qui sont deja rempli par defaut, tous ca se fera en une seule page en deux colonnes et beau
+    - une page de confirmation avec les donnees que l'utilisateur entre sera attendu
+
+    - cree les fichier service(et les autres) necessaire pour bien factoriser le code et tu peux t'arreter pour me demander les noms d'attribut si tu ne sais pas
+    - ne diverge de ma facon de coder, applique toi 
