@@ -24,7 +24,9 @@ export async function getCategories() {
     const categories = jsonData?.prestashop?.categories?.category || []
     const categoryArray = Array.isArray(categories) ? categories : [categories]
 
-    return categoryArray.map(cat => ({
+    const filteredCategories = categoryArray.slice(2)
+
+    return filteredCategories.map(cat => ({
       id: cat.id,
       nom: cat.name?.language?.['#text'] || cat.name || 'Catégorie'
     }))

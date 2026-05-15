@@ -18,13 +18,18 @@ export async function getStockAvailability(productId, combinationId = null) {
 
     const stockArray = Array.isArray(stocks) ? stocks : [stocks]
 
-    const hasStock = stockArray.some(stock => {
-      const quantity = parseInt(stock.quantity?.['#text'] || stock.quantity || 0)
-      return quantity > 0
-    })
-    return hasStock
+
+    let qtt = 0
+    if (stockArray.length > 0) {
+      console.log(`Stock trouvé pour productId ${productId} et combinationId ${combinationId}:`, stockArray)
+      qtt = parseInt(stockArray[0].quantity?.['#text'] || stockArray[0].quantity || 0)
+      console.log(`Quantité disponible pour productId ${productId} et combinationId ${combinationId}:`, qtt)
+      return qtt
+    }
+    return 0
+    
   } catch (error) {
     console.error('Erreur lors de la récupération du stock:', error)
-    return true
+    return 0
   }
 }

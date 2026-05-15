@@ -64,8 +64,18 @@ const displayImage = computed(() => {
   return matchingCombination.value?.image || productDetail.value?.image || ''
 })
 
+const nbInStock = computed(() => {
+  if (!productDetail.value) return 0
+
+  if (matchingCombination.value) {
+    return matchingCombination.value.inStock || 0
+  }
+
+  return productDetail.value.inStock || 0
+})
+
 const isInStock = computed(() => {
-  return productDetail.value?.inStock || false
+  return nbInStock.value > 0
 })
 
 watch(() => productDetail.value, () => {
@@ -233,7 +243,7 @@ const increaseQuantity = () => {
           <!-- Disponibilité -->
           <div class="availability">
             <span v-if="isInStock" class="in-stock">
-              En stock
+              En stock avec {{ nbInStock }} disponible{{ nbInStock > 1 ? 's' : '' }}
             </span>
             <span v-else class="out-of-stock">
               Rupture de stock

@@ -2,18 +2,27 @@
 import { ref, onMounted } from 'vue'
 import ProductCard from '../../components/FO/ProductCard.vue'
 import { getProducts } from '../../services/productService'
+import { getCategories } from '../../services/CategorieService'
 import '../../styles/products.css'
 
 const products = ref([])
+const categories = ref([])
 const isLoading = ref(false)
 const error = ref(null)
+
+const searchCriteria = ref({
+  name: '',
+  categoryId: '',
+  minPrice: null,
+  maxPrice: null
+})
 
 const loadProducts = async () => {
   isLoading.value = true
   error.value = null
   
   try {
-    products.value = await getProducts()
+    products.value = await getProducts(searchCriteria.value)
   } catch (err) {
     error.value = err.message || 'Erreur lors du chargement des produits'
     console.error('Erreur:', err)
@@ -23,8 +32,31 @@ const loadProducts = async () => {
 }
 
 onMounted(() => {
+  loadCategories()
   loadProducts()
 })
+
+const loadCategories = async () => {
+  try {
+    categories.value = await getCategories()
+  } catch (err) {
+    console.error('Erreur categories:', err)
+  }
+}
+
+const handleSearch = () => {
+  loadProducts()
+}
+
+const resetSearch = () => {
+  searchCriteria.value = {
+    name: '',
+    categoryId: '',
+    minPrice: null,
+    maxPrice: null
+  }
+  loadProducts()
+}
 
 const handleToggleFavorite = (productId) => {
   const product = products.value.find(p => p.id === productId)
@@ -43,6 +75,33 @@ const handlePreview = (productId) => {
     <div class="page-container">
       <h1>Nos Produits</h1>
       <p class="subtitle">Découvrez notre sélection de produits</p>
+
+      <!-- Search Filters -->
+      <div class="search-filters">
+        <div class="filter-group">
+          <label>Recherche par nom</label>
+          <input type="text" v-model="searchCriteria.name" placeholder="Ex: T-shirt..." @keyup.enter="handleSearch">
+        </div>
+        <div class="filter-group">
+          <label>Catégorie</label>
+          <select v-model="searchCriteria.categoryId" @change="handleSearch">
+            <option value="">Toutes les catégories</option>
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.nom }}</option>
+          </select>
+        </div>
+        <div class="filter-group price-group">
+          <label>Prix (min - max)</label>
+          <div class="price-inputs">
+            <input type="number" v-model="searchCriteria.minPrice" placeholder="Min" @keyup.enter="handleSearch">
+            <span>-</span>
+            <input type="number" v-model="searchCriteria.maxPrice" placeholder="Max" @keyup.enter="handleSearch">
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button @click="handleSearch" class="btn-search">Rechercher</button>
+          <button @click="resetSearch" class="btn-reset">Réinitialiser</button>
+        </div>
+      </div>
 
       <!-- Loading -->
       <div v-if="isLoading" class="loading-spinner">
@@ -99,6 +158,110 @@ h1 {
   text-align: center;
   margin-bottom: 40px;
   font-size: 1.1rem;
+}
+
+/* Search Filters Styles */
+.search-filters {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-bottom: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.filter-group input, .filter-group select {
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+  background-color: #f9fafb;
+}
+
+.filter-group input:focus, .filter-group select:focus {
+  border-color: #3b82f6;
+  background-color: white;
+}
+
+.price-inputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.price-inputs input {
+  width: 100%;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.btn-search {
+  flex: 2;
+  padding: 12px 20px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-search:hover {
+  background: #2563eb;
+}
+
+.btn-reset {
+  flex: 1;
+  padding: 12px 20px;
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-reset:hover {
+  background: #e5e7eb;
+}
+
+@media (max-width: 768px) {
+  .search-filters {
+    flex-direction: column;
+    padding: 16px;
+  }
+  .filter-group, .filter-actions {
+    width: 100%;
+  }
+  .filter-actions {
+    margin-top: 10px;
+  }
 }
 
 .products-grid {

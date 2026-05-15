@@ -11,9 +11,23 @@ import { getSpecificPrices, getProductPricingDisplay } from './specificPricesSer
  * Récupère la liste des produits depuis PrestaShop
  * @returns {Promise<Array>} Liste des produits formatée
  */
-export async function getProducts() {
+export async function getProducts(criteria = {}) {
   try {
-    const response = await fetch(`${API_URL}/products?display=full`)
+    let url = `${API_URL}/products?display=full`
+    
+    if (criteria.name) {
+      url += `&filter[name]=%[${encodeURIComponent(criteria.name)}]%`
+    }
+    if (criteria.categoryId) {
+      url += `&filter[id_category_default]=[${criteria.categoryId}]`
+    }
+    if (criteria.minPrice || criteria.maxPrice) {
+      const min = criteria.minPrice || 0
+      const max = criteria.maxPrice || 9999999
+      url += `&filter[price]=[${min},${max}]`
+    }
+
+    const response = await fetch(url)
 
     const xmlData = await response.text()
 
@@ -139,6 +153,7 @@ export async function getProductDetail(productId) {
     if (product.on_sale === 1 || product.on_sale === '1') badges.push('Solde')
 
     const inStock = await getStockAvailability(productId)
+    
     const taxRate = await getProductTaxRate(product)
     const priceHt = Number(product.price || 0)
     const price = priceHt * (1 + taxRate / 100)

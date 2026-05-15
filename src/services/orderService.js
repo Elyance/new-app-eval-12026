@@ -137,7 +137,7 @@ export async function createOrder(orderData) {
       id_lang: orderData.id_lang || 1,
       id_customer: orderData.id_customer,
       id_carrier: orderData.id_carrier || 1,
-      current_state: 1,
+      current_state: 2,
       module: orderData.module || 'ps_cashondelivery',
       payment: orderData.payment || 'Paiement à la livraison',
       total_paid: orderData.total_paid || 0,
@@ -182,8 +182,15 @@ export async function createOrder(orderData) {
     const createdOrder = jsonData?.prestashop?.order
     if (!createdOrder) return null
 
+    const createdOrderId = getXmlValue(createdOrder.id)
+
+    // Ajouter la ligne d'historique de statut pour la commande
+    if (createdOrderId) {
+      await addOrderHistory(createdOrderId, 2)
+    }
+
     return {
-      id: getXmlValue(createdOrder.id),
+      id: createdOrderId,
       reference: getXmlString(createdOrder.reference),
       id_cart: getXmlValue(createdOrder.id_cart),
       id_customer: getXmlValue(createdOrder.id_customer),
@@ -192,5 +199,37 @@ export async function createOrder(orderData) {
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error)
     return null
+  }
+}
+
+/**
+ * Ajoute un historique d'état à une commande
+ * @param {number} id_order - ID de la commande
+ * @param {number} id_order_state - ID du nouvel état
+ */
+export async function addOrderHistory(id_order, id_order_state) {
+  try {
+    const historyData = {
+      id_order,
+      id_order_state
+    }
+
+    const historyXML = jsonToXml(historyData, 'order_history')
+    console.log('XML envoyé pour historique de commande:', historyXML)
+
+    const response = await fetch(`${API_URL}/order_histories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      },
+      body: historyXML
+    })
+
+    if (!response.ok) {
+      console.error('Réponse erreur PrestaShop (order_histories):', await response.text())
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout de l\'historique de commande:', error)
   }
 }
