@@ -1,7 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { cartStore } from '../../stores/cartStore'
+import { authStore } from '../../stores/authStore'
 import '../../styles/navbar.css'
+
+const router = useRouter()
 
 const searchQuery = ref('')
 const isMobileMenuOpen = ref(false)
@@ -12,9 +16,10 @@ const categories = [
   { id: 3, name: 'Art' }
 ]
 
-// Charger le compteur du panier au montage
+// Charger le compteur du panier et restaurer la session au montage
 onMounted(() => {
   cartStore.refreshCount()
+  authStore.restoreSession()
 })
 
 const handleSearch = () => {
@@ -23,8 +28,12 @@ const handleSearch = () => {
 }
 
 const handleLogin = () => {
-  console.log('Redirection vers connexion')
-  // API integration point: navigate to login or open modal
+  router.push('/fo/connexion')
+}
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/fo')
 }
 
 const handleCart = () => {
@@ -86,14 +95,28 @@ const toggleMobileMenu = () => {
             </button>
           </div>
 
-          <!-- Connexion -->
-          <button 
-            class="action-button login-button"
-            @click="handleLogin"
-            title="Se connecter"
-          >
-            <span class="label">Connexion</span>
-          </button>
+          <!-- Connexion / Profil -->
+          <template v-if="authStore.isLoggedIn">
+            <div class="user-menu">
+              <span class="user-name">{{ authStore.customer.firstname }}</span>
+              <button
+                class="action-button logout-button"
+                @click="handleLogout"
+                title="Se déconnecter"
+              >
+                <span class="label">Déconnexion</span>
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <button 
+              class="action-button login-button"
+              @click="handleLogin"
+              title="Se connecter"
+            >
+              <span class="label">Connexion</span>
+            </button>
+          </template>
 
           <!-- Panier -->
           <router-link to="/fo/panier" class="action-button cart-button">

@@ -169,6 +169,33 @@
   white-space: nowrap;
 }
 
+/* ==================== User Menu (Logged In) ==================== */
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  white-space: nowrap;
+}
+
+.logout-button {
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-light);
+  border-color: transparent;
+}
+
+.logout-button:hover {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
 /* ==================== Menu Mobile Toggle ==================== */
 .mobile-toggle {
   display: none;

@@ -3,7 +3,8 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getCart,
-  getIdCartInSessionStorage
+  getIdCartInSessionStorage,
+  updateCartCustomer
 } from '../../services/cartService'
 import { getProductDetail } from '../../services/productService'
 import { getProductPricingDisplay } from '../../services/specificPricesService'
@@ -11,10 +12,12 @@ import { getCountries } from '../../services/countryService'
 import { getCarriers } from '../../services/carrierService'
 import { createGuestCustomer, createAddress, createOrder } from '../../services/orderService'
 import { cartStore } from '../../stores/cartStore'
+import { useOrderStore } from '../../stores/orderStore'
 import { API_URL } from '../../constants/constant'
 import '../../styles/checkout.css'
 
 const router = useRouter()
+const orderStore = useOrderStore()
 
 // State
 const isLoading = ref(true)
@@ -174,6 +177,14 @@ const validateForm = () => {
     isValid = false
   }
 
+  if (!form.email.trim()) {
+    errors.email = 'Email est requis'
+    isValid = false
+  } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.email.trim())) {
+    errors.email = 'Email invalide'
+    isValid = false
+  }
+
   return isValid
 }
 
@@ -193,11 +204,10 @@ const handleSubmitOrder = async () => {
     }
 
     // 1. Créer le client guest
-    const email = `guest_${Date.now()}@guest.com`
     const customer = await createGuestCustomer({
       firstname: form.firstname.trim(),
       lastname: form.lastname.trim(),
-      email
+      email: form.email.trim(),
     })
 
     if (!customer) {
@@ -206,7 +216,15 @@ const handleSubmitOrder = async () => {
 
     console.log('Client guest créé:', customer)
 
-    // 2. Créer l'adresse
+    // 2. Mettre à jour le panier avec le id_customer du guest
+    const updatedCart = await updateCartCustomer(cartId, customer.id)
+    if (!updatedCart) {
+      console.warn('Impossible de mettre à jour le customer du panier, tentative de continuer...')
+    }
+
+    console.log('Panier mis à jour avec id_customer:', customer.id)
+
+    // 3. Créer l'adresse
     const address = await createAddress({
       id_customer: customer.id,
       firstname: form.firstname.trim(),
@@ -224,7 +242,7 @@ const handleSubmitOrder = async () => {
 
     console.log('Adresse créée:', address)
 
-    // 3. Construire les order_rows
+    // 4. Construire les order_rows
     const orderRows = cartItems.value.map(item => ({
       product_id: item.id,
       product_attribute_id: item.id_product_attribute || 0,
@@ -236,7 +254,7 @@ const handleSubmitOrder = async () => {
       unit_price_tax_excl: item.price
     }))
 
-    // 4. Créer la commande
+    // 5. Créer la commande
     const order = await createOrder({
       id_address_delivery: address.id,
       id_address_invoice: address.id,
@@ -267,37 +285,34 @@ const handleSubmitOrder = async () => {
     sessionStorage.removeItem('id_cart')
     await cartStore.refreshCount()
 
-    // Naviguer vers la confirmation avec les données
+    // Stocker les données de confirmation dans le store Pinia
     const selectedCountry = countries.value.find(c => c.id === Number(form.id_country))
     const selectedCarrier = carriers.value.find(c => c.id === form.id_carrier)
 
-    router.push({
-      name: 'OrderConfirmation',
-      params: { id: order.id },
-      state: {
-        orderData: {
-          id: order.id,
-          reference: order.reference,
-          customer: {
-            firstname: form.firstname,
-            lastname: form.lastname
-          },
-          address: {
-            address1: form.address1,
-            postcode: form.postcode,
-            city: form.city,
-            country: selectedCountry?.name || ''
-          },
-          carrier: selectedCarrier?.name || 'Click and collect',
-          carrierDelay: selectedCarrier?.delay || '',
-          payment: form.payment,
-          items: cartItems.value,
-          subtotal: subtotal.value,
-          shipping: shipping.value,
-          total: total.value
-        }
-      }
+    orderStore.setConfirmation({
+      id: order.id,
+      reference: order.reference,
+      customer: {
+        firstname: form.firstname,
+        lastname: form.lastname
+      },
+      address: {
+        address1: form.address1,
+        postcode: form.postcode,
+        city: form.city,
+        country: selectedCountry?.name || ''
+      },
+      carrier: selectedCarrier?.name || 'Click and collect',
+      carrierDelay: selectedCarrier?.delay || '',
+      payment: form.payment,
+      items: cartItems.value,
+      subtotal: subtotal.value,
+      shipping: shipping.value,
+      total: total.value
     })
+
+    // Naviguer vers la confirmation
+    router.push({ name: 'OrderConfirmation', params: { id: order.id } })
   } catch (err) {
     console.error('Erreur lors de la soumission de la commande:', err)
     alert('Une erreur est survenue lors de la création de la commande. Veuillez réessayer.')
@@ -391,6 +406,12 @@ const handleSubmitOrder = async () => {
                 :class="{ error: errors.address1 }"
               />
               <p v-if="errors.address1" class="error-message">{{ errors.address1 }}</p>
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email <span class="required">*</span></label>
+              <input id="email" v-model="form.email" type="text" placeholder="Votre email" :class="{error: errors.email}">
+              <p v-if="errors.email" class="error-message">{{ errors.email }}</p>
             </div>
 
             <div class="form-row">

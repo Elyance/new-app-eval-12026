@@ -442,3 +442,44 @@ export function getIdCartInSessionStorage() {
 export function addIdCartInSessionStorage(idCart) {
   sessionStorage.setItem('id_cart', String(idCart))
 }
+
+/**
+ * Met à jour le id_customer d'un panier existant (PATCH)
+ * Nécessaire avant de créer une commande pour lier le cart au guest customer
+ * @param {number} cartId - ID du panier
+ * @param {number} idCustomer - ID du client guest
+ * @returns {Object|null} Le panier mis à jour
+ */
+export async function updateCartCustomer(cartId, idCustomer) {
+  try {
+    const cartData = {
+      id: cartId,
+      id_customer: idCustomer
+    }
+
+    const cartXML = jsonToXml(cartData, 'cart')
+    console.log('XML envoyé pour mise à jour du customer dans le panier:', cartXML)
+
+    const response = await fetch(`${API_URL}/carts/${cartId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      },
+      body: cartXML
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Réponse erreur PrestaShop (updateCartCustomer):', errorText)
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+    return jsonData?.prestashop?.cart || null
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du customer du panier:', error)
+    return null
+  }
+}

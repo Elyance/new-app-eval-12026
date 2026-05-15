@@ -1,18 +1,21 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useOrderStore } from '../../stores/orderStore'
 import '../../styles/checkout.css'
 
 const route = useRoute()
 const router = useRouter()
+const orderStore = useOrderStore()
 
 const orderData = ref(null)
 
 onMounted(() => {
-  // Récupérer les données de la commande depuis le state de navigation
-  const state = history.state?.orderData
-  if (state) {
-    orderData.value = state
+  // Récupérer les données de la commande depuis le store Pinia
+  if (orderStore.confirmation) {
+    orderData.value = orderStore.confirmation
+    // Nettoyer après lecture pour éviter les données obsolètes
+    orderStore.clearConfirmation()
   } else {
     // Pas de données → rediriger vers l'accueil
     router.push('/fo')

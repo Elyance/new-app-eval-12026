@@ -3,6 +3,7 @@ import HomePage from '../views/FO/HomePage.vue'
 import ProductsPage from '../views/FO/ProductsPage.vue'
 import ProductDetailPage from '../views/FO/ProductDetailPage.vue'
 import CartPage from '../views/FO/CartPage.vue'
+import LoginPage from '../views/FO/LoginPage.vue'
 import CheckoutPage from '../views/FO/CheckoutPage.vue'
 import OrderConfirmationPage from '../views/FO/OrderConfirmationPage.vue'
 
@@ -30,6 +31,11 @@ const routes = [
     path: '/fo/panier',
     name: 'Cart',
     component: CartPage
+  },
+  {
+    path: '/fo/connexion',
+    name: 'Login',
+    component: LoginPage
   },
   {
     path: '/fo/commande',
