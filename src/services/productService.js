@@ -28,7 +28,29 @@ export async function getProducts() {
 
     const formattedProducts = productArray.map(async (item) => {
       const badges = []
-      if (item.new) badges.push('Nouveau')
+      
+      console.log("available_date : ", item.available_date)
+      console.log("date_add : ", item.date_add)
+      const productDateStr = item.available_date && !item.available_date.startsWith('0000') 
+        ? item.available_date 
+        : item.date_add;
+
+      console.log("productDateStr : ", productDateStr)
+      
+        
+      if (productDateStr && !productDateStr.startsWith('0000')) {
+        const productDate = new Date(productDateStr);
+        if (!isNaN(productDate.getTime())) {
+          const diffDays = (Date.now() - productDate.getTime()) / (1000 * 60 * 60 * 24);
+          console.log("diffDays : ", diffDays)
+          if (diffDays >= 0 && diffDays <= 1) {
+            badges.push('HOT');
+          } else if (diffDays >= 0 && diffDays <= 7) {
+            badges.push('NEW');
+          }
+        }
+      }
+
       if (item.on_sale === 1 || item.on_sale === '1') badges.push('Solde')
 
       const imageId = item.id_default_image?.['#text'] || 1
@@ -92,7 +114,28 @@ export async function getProductDetail(productId) {
     const image = `${API_URL}/images/products/${productId}/${imageId}`
 
     const badges = []
-    if (product.new) badges.push('Nouveau')
+
+    console.log("available_date : ", product.available_date)
+    console.log("date_add : ", product.date_add)
+    
+    const productDateStr = product.available_date && !product.available_date.startsWith('0000') 
+      ? product.available_date 
+      : product.date_add;
+
+    console.log("productDateStr : ", productDateStr)
+      
+    if (productDateStr && !productDateStr.startsWith('0000')) {
+      const productDate = new Date(productDateStr);
+      if (!isNaN(productDate.getTime())) {
+        const diffDays = (Date.now() - productDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffDays >= 0 && diffDays <= 1) {
+          badges.push('HOT');
+        } else if (diffDays >= 0 && diffDays <= 7) {
+          badges.push('NEW');
+        }
+      }
+    }
+
     if (product.on_sale === 1 || product.on_sale === '1') badges.push('Solde')
 
     const inStock = await getStockAvailability(productId)

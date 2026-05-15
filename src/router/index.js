@@ -32,10 +32,15 @@ const routes = [
     name: 'Cart',
     component: CartPage
   },
+  // {
+  //   path: '/fo/connexion',
+  //   name: 'Login',
+  //   component: LoginPage
+  // },
   {
     path: '/fo/connexion',
     name: 'Login',
-    component: LoginPage
+    component: HomePage
   },
   {
     path: '/fo/commande',

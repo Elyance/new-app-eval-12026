@@ -113,6 +113,7 @@ const toggleMobileMenu = () => {
               class="action-button login-button"
               @click="handleLogin"
               title="Se connecter"
+              v-show="true"
             >
               <span class="label">Connexion</span>
             </button>

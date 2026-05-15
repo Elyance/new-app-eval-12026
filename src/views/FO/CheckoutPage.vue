@@ -13,6 +13,9 @@ import { getCarriers } from '../../services/carrierService'
 import { createGuestCustomer, createAddress, createOrder } from '../../services/orderService'
 import { cartStore } from '../../stores/cartStore'
 import { useOrderStore } from '../../stores/orderStore'
+import { authStore } from '../../stores/authStore'
+import { getCustomerAddresses } from '../../services/customerService'
+import { getXmlString } from '../../utils/parsing'
 import { API_URL } from '../../constants/constant'
 import '../../styles/checkout.css'
 
@@ -124,6 +127,22 @@ const loadCheckoutData = async () => {
       const defaultCarrier = carriersList.find(c => c.id === 1) || carriersList[0]
       form.id_carrier = defaultCarrier.id
     }
+
+    // Préremplir avec les informations du client connecté
+    if (authStore.isLoggedIn && authStore.customer) {
+      form.firstname = getXmlString(authStore.customer.firstname)
+      form.lastname = getXmlString(authStore.customer.lastname)
+      form.email = getXmlString(authStore.customer.email)
+
+      const addresses = await getCustomerAddresses(authStore.customer.id)
+      if (addresses && addresses.length > 0) {
+        const addr = addresses[0]
+        form.address1 = getXmlString(addr.address1)
+        form.postcode = getXmlString(addr.postcode)
+        form.city = getXmlString(addr.city)
+        form.id_country = addr.id_country ? Number(addr.id_country) : form.id_country
+      }
+    }
   } catch (err) {
     console.error('Erreur chargement checkout:', err)
   } finally {
@@ -203,18 +222,24 @@ const handleSubmitOrder = async () => {
       throw new Error('Panier introuvable')
     }
 
-    // 1. Créer le client guest
-    const customer = await createGuestCustomer({
-      firstname: form.firstname.trim(),
-      lastname: form.lastname.trim(),
-      email: form.email.trim(),
-    })
+    let customer = null;
 
-    if (!customer) {
-      throw new Error('Erreur lors de la création du client')
+    // 1. Utiliser le client connecté ou créer un client guest
+    if (authStore.isLoggedIn && authStore.customer) {
+      customer = authStore.customer;
+      console.log('Utilisation du client connecté:', customer);
+    } else {
+      customer = await createGuestCustomer({
+        firstname: form.firstname.trim(),
+        lastname: form.lastname.trim(),
+        email: form.email.trim(),
+      })
+
+      if (!customer) {
+        throw new Error('Erreur lors de la création du client')
+      }
+      console.log('Client guest créé:', customer)
     }
-
-    console.log('Client guest créé:', customer)
 
     // 2. Mettre à jour le panier avec le id_customer du guest
     const updatedCart = await updateCartCustomer(cartId, customer.id)
@@ -379,6 +404,7 @@ const handleSubmitOrder = async () => {
                   type="text"
                   placeholder="Votre prénom"
                   :class="{ error: errors.firstname }"
+                  :disabled="authStore.isLoggedIn"
                 />
                 <p v-if="errors.firstname" class="error-message">{{ errors.firstname }}</p>
               </div>
@@ -391,6 +417,7 @@ const handleSubmitOrder = async () => {
                   type="text"
                   placeholder="Votre nom"
                   :class="{ error: errors.lastname }"
+                  :disabled="authStore.isLoggedIn"
                 />
                 <p v-if="errors.lastname" class="error-message">{{ errors.lastname }}</p>
               </div>
@@ -410,7 +437,7 @@ const handleSubmitOrder = async () => {
 
             <div class="form-group">
               <label for="email">Email <span class="required">*</span></label>
-              <input id="email" v-model="form.email" type="text" placeholder="Votre email" :class="{error: errors.email}">
+              <input id="email" v-model="form.email" type="text" placeholder="Votre email" :class="{error: errors.email}" :disabled="authStore.isLoggedIn">
               <p v-if="errors.email" class="error-message">{{ errors.email }}</p>
             </div>
 

@@ -84,3 +84,69 @@ export async function getCustomerById(customerId) {
     return null
   }
 }
+
+/**
+ * Récupère les adresses d'un client
+ * @param {number} customerId - ID du client
+ * @returns {Array} Liste des adresses ou tableau vide
+ */
+export async function getCustomerAddresses(customerId) {
+  try {
+    const response = await fetch(`${API_URL}/addresses?filter[id_customer]=${customerId}&display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+
+    const addresses = jsonData?.prestashop?.addresses?.address || []
+    return Array.isArray(addresses) ? addresses : [addresses]
+  } catch (error) {
+    console.error(`Erreur lors de la récupération des adresses du client ${customerId}:`, error)
+    return []
+  }
+}
+
+/**
+ * Récupère tous les clients
+ * @returns {Array} Liste de tous les clients
+ */
+export async function getAllCustomers() {
+  try {
+    const response = await fetch(`${API_URL}/customers?display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+
+    const customers = jsonData?.prestashop?.customers?.customer || []
+    const customerArray = Array.isArray(customers) ? customers : [customers]
+    
+    return customerArray.map(customer => ({
+      id: Number(customer.id || 0),
+      firstname: customer.firstname || '',
+      lastname: customer.lastname || '',
+      email: customer.email || '',
+      secure_key: customer.secure_key || '',
+      is_guest: customer.is_guest === '1' || customer.is_guest === 1
+    }))
+  } catch (error) {
+    console.error('Erreur lors de la récupération de tous les clients:', error)
+    return []
+  }
+}

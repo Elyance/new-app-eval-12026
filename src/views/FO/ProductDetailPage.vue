@@ -187,6 +187,18 @@ const increaseQuantity = () => {
         <div class="images-section">
           <!-- Grande image -->
           <div class="main-image-container">
+            <!-- Badges -->
+            <div v-if="productDetail.badges && productDetail.badges.length" class="badges-container">
+              <span 
+                v-for="badge in productDetail.badges"
+                :key="badge"
+                class="badge"
+                :class="badge.toLowerCase()"
+              >
+                {{ badge }}
+              </span>
+            </div>
+
             <img 
               :src="displayImage" 
               :alt="productDetail.name"

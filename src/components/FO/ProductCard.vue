@@ -38,6 +38,18 @@ const handlePreview = () => {
         >
           ♡
         </button>
+
+        <!-- Badges -->
+        <div class="badges-container">
+          <span 
+            v-for="badge in product.badges"
+            :key="badge"
+            class="badge"
+            :class="badge.toLowerCase()"
+          >
+            {{ badge }}
+          </span>
+        </div>
       </div>
 
       <!-- Info Container -->

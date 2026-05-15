@@ -1,4 +1,5 @@
 import { xmlToJson, jsonToXml } from '../utils/xmlParser'
+import { getXmlValue, getXmlString } from '../utils/parsing'
 import { API_URL, API_KEY } from '../constants/constant'
 
 /**
@@ -182,11 +183,11 @@ export async function createOrder(orderData) {
     if (!createdOrder) return null
 
     return {
-      id: Number(createdOrder.id || 0),
-      reference: createdOrder.reference || '',
-      id_cart: Number(createdOrder.id_cart || 0),
-      id_customer: Number(createdOrder.id_customer || 0),
-      total_paid: Number(createdOrder.total_paid || 0)
+      id: getXmlValue(createdOrder.id),
+      reference: getXmlString(createdOrder.reference),
+      id_cart: getXmlValue(createdOrder.id_cart),
+      id_customer: getXmlValue(createdOrder.id_customer),
+      total_paid: getXmlValue(createdOrder.total_paid)
     }
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error)

@@ -44,6 +44,40 @@
   transform: scale(1.05);
 }
 
+/* Badges Container */
+.badges-container {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+
+.badge {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 4px;
+  text-transform: uppercase;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: inline-block;
+}
+
+.badge.hot {
+  background-color: #ef4444; /* Rouge pour HOT */
+}
+
+.badge.new {
+  background-color: #10b981; /* Vert pour NEW */
+}
+
+.badge.solde {
+  background-color: #f59e0b; /* Orange pour Solde */
+}
+
 /* Favorite Button */
 .favorite-btn {
   position: absolute;
