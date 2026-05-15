@@ -330,6 +330,7 @@ const handleSubmitOrder = async () => {
       carrier: selectedCarrier?.name || 'Click and collect',
       carrierDelay: selectedCarrier?.delay || '',
       payment: form.payment,
+      state: order.status || 'Etat inconnu', 
       items: cartItems.value,
       subtotal: subtotal.value,
       shipping: shipping.value,

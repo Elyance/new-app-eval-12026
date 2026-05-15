@@ -78,6 +78,11 @@ onMounted(() => {
             </div>
 
             <div class="detail-block">
+              <h3>État de la commande</h3>
+              <p class="detail-highlight">{{ orderData.state }}</p>
+            </div>
+
+            <div class="detail-block">
               <h3>Livraison</h3>
               <p class="detail-highlight">{{ orderData.carrier }}</p>
               <p v-if="orderData.carrierDelay">{{ orderData.carrierDelay }}</p>

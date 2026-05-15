@@ -182,19 +182,22 @@ export async function createOrder(orderData) {
     const createdOrder = jsonData?.prestashop?.order
     if (!createdOrder) return null
 
+    console.log('Commande créée avec succès:', createdOrder)
+
     const createdOrderId = getXmlValue(createdOrder.id)
 
     // Ajouter la ligne d'historique de statut pour la commande
     if (createdOrderId) {
       await addOrderHistory(createdOrderId, 2)
     }
-
+    
     return {
       id: createdOrderId,
       reference: getXmlString(createdOrder.reference),
       id_cart: getXmlValue(createdOrder.id_cart),
       id_customer: getXmlValue(createdOrder.id_customer),
-      total_paid: getXmlValue(createdOrder.total_paid)
+      total_paid: getXmlValue(createdOrder.total_paid),
+      status: (await getOrderStateById(2))?.name || 'Etat inconnu'
     }
   } catch (error) {
     console.error('Erreur lors de la création de la commande:', error)
@@ -231,5 +234,35 @@ export async function addOrderHistory(id_order, id_order_state) {
     }
   } catch (error) {
     console.error('Erreur lors de l\'ajout de l\'historique de commande:', error)
+  }
+}
+
+export async function getOrderStateById(id_order_state) {
+  try {
+    console.log(`Récupération de l'état de la commande pour id_order_state: ${id_order_state} avec type: ${typeof id_order_state}`)
+    const response = await fetch(`${API_URL}/order_states/${id_order_state}?display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+
+    const orderState = jsonData?.prestashop?.order_state
+    if (!orderState) return null
+
+    return {
+      id: getXmlValue(orderState.id),
+      name: getXmlString(orderState.name?.language)
+    }
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'état de la commande:', error)
+    return null
   }
 }
