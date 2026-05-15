@@ -6,11 +6,14 @@ import CartPage from '../views/FO/CartPage.vue'
 import LoginPage from '../views/FO/LoginPage.vue'
 import CheckoutPage from '../views/FO/CheckoutPage.vue'
 import OrderConfirmationPage from '../views/FO/OrderConfirmationPage.vue'
+import LandingPage from '../views/LandingPage.vue'
+import BackOfficePlaceholder from '../views/BackOfficePlaceholder.vue'
 
 const routes = [
   {
     path: '/',
-    redirect: '/fo'
+    name: 'Landing',
+    component: LandingPage
   },
   {
     path: '/fo',
@@ -41,6 +44,11 @@ const routes = [
     path: '/fo/connexion',
     name: 'Login',
     component: HomePage
+  },
+  {
+    path: '/backoffice',
+    name: 'BackOffice',
+    component: BackOfficePlaceholder
   },
   {
     path: '/fo/commande',
