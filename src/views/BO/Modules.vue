@@ -7,6 +7,9 @@
           <router-link to="/backoffice/modules/tableau-de-bord" class="btn btn-outline-primary btn-sm">
             Tableau de bord
           </router-link>
+          <router-link to="/backoffice/modules/produits" class="btn btn-outline-primary btn-sm ms-2">
+            Produits
+          </router-link>
         </div>
       </div>
       <div class="card border-0 shadow-sm">

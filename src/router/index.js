@@ -15,6 +15,7 @@ import ImportStatic from '@/views/BO/GestionDonnees/ImportStatic.vue'
 import Commandes from '@/views/BO/Modules/Commandes.vue'
 import CommandeDetail from '@/views/BO/Modules/CommandeDetail.vue'
 import TableauBord from '@/views/BO/Modules/TableauBord.vue'
+import Produits from '@/views/BO/Modules/Produits.vue'
 import Login from '@/components/Auth/Login.vue'
 import { setupRouterGuards } from '@/middleware/authGuard'
 
@@ -57,6 +58,15 @@ const routes = [
         meta: {
           title: 'Tableau de bord',
           description: 'Aperçu statique des commandes par jour.'
+        }
+      },
+      {
+        path: 'produits',
+        name: 'Produits',
+        component: Produits,
+        meta: {
+          title: 'Produits',
+          description: 'Liste statique des produits avec action de stock.'
         }
       },
       {
