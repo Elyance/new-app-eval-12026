@@ -35,3 +35,41 @@ export async function getCarriers() {
     return []
   }
 }
+
+/**
+ * Récupère un transporteur par son ID
+ * @param {number} carrierId
+ * @returns {Promise<Object|null>}
+ */
+export async function findCarrierById(carrierId) {
+  try {
+    if (!carrierId || Number(carrierId) === 0) return null
+
+    const response = await fetch(`${API_URL}/carriers/${carrierId}?display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+
+    const carrier = jsonData?.prestashop?.carrier
+    if (!carrier) return null
+
+    return {
+      id: Number(carrier.id || 0),
+      name: carrier.name || 'Sans nom',
+      delay: carrier.delay?.language?.['#text'] || carrier.delay?.language || '',
+      active: carrier.active === '1' || carrier.active === 1
+    }
+  } catch (error) {
+    console.error(`Erreur lors de la récupération du transporteur ${carrierId}:`, error)
+    return null
+  }
+}

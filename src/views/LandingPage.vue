@@ -8,7 +8,7 @@ function goFO() {
 }
 
 function goBackOffice() {
-  router.push('/backoffice')
+  router.push('/backoffice/login')
 }
 </script>
 
