@@ -38,15 +38,30 @@ function parseLocalizedNumber(value) {
 
 // Valide et formate une date strictement au format DD/MM/YYYY
 function validateAndFormatDisplayDate(value, fieldName = 'date', lineNum) {
-  const str = String(value ?? '').trim()
-  if (!str) {
+  let raw = String(value ?? '').trim()
+  if (!raw) {
     throw new Error(`Ligne ${lineNum} : Le champ '${fieldName}' est obligatoire et ne peut pas être vide.`)
   }
 
+  // Remplacer les tirets et les points par des slashes
+  raw = raw.replace(/[-.]/g, '/')
+
+  // Nettoyer tous les caractères indésirables (espaces invisibles, etc.)
+  raw = raw.replace(/[^\d\/]/g, '').trim()
+
+  // Auto-compléter les zéros initiaux (ex: 1/12/2025 -> 01/12/2025)
+  const parts = raw.split('/')
+  if (parts.length === 3) {
+    const day = parts[0].padStart(2, '0')
+    const month = parts[1].padStart(2, '0')
+    const year = parts[2]
+    raw = `${day}/${month}/${year}`
+  }
+
   // Format exact DD/MM/YYYY
-  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
   if (!match) {
-    throw new Error(`Ligne ${lineNum} : Le format de la date '${str}' pour le champ '${fieldName}' est incorrect. Format attendu : DD/MM/YYYY.`)
+    throw new Error(`Ligne ${lineNum} : Le format de la date '${value}' pour le champ '${fieldName}' est incorrect. Format attendu : DD/MM/YYYY.`)
   }
 
   const [, dayStr, monthStr, yearStr] = match
@@ -56,15 +71,15 @@ function validateAndFormatDisplayDate(value, fieldName = 'date', lineNum) {
 
   // Validation calendrier standard
   if (month < 1 || month > 12) {
-    throw new Error(`Ligne ${lineNum} : Le mois '${monthStr}' de la date '${str}' est invalide (doit être entre 01 et 12).`)
+    throw new Error(`Ligne ${lineNum} : Le mois '${monthStr}' de la date '${value}' est invalide (doit être entre 01 et 12).`)
   }
 
   const daysInMonth = new Date(year, month, 0).getDate()
   if (day < 1 || day > daysInMonth) {
-    throw new Error(`Ligne ${lineNum} : Le jour '${dayStr}' de la date '${str}' est invalide pour ce mois (maximum ${daysInMonth} jours).`)
+    throw new Error(`Ligne ${lineNum} : Le jour '${dayStr}' de la date '${value}' est invalide pour ce mois (maximum ${daysInMonth} jours).`)
   }
 
-  return str
+  return raw
 }
 
 // Valide qu'un montant est strictement supérieur à 0
@@ -182,7 +197,12 @@ export function traitementFichier2(rows = []) {
     .filter((row) => !isEmptyRow(row))
     .map((row, index) => {
       const lineNum = index + 1
-      const prixVenteTtc = validatePositivePrice(row.prix_vente_ttc, 'prix_vente_ttc', lineNum)
+      
+      let prixVenteTtc = null
+      const prixVal = String(row.prix_vente_ttc ?? '').trim()
+      if (prixVal) {
+        prixVenteTtc = validatePositivePrice(prixVal, 'prix_vente_ttc', lineNum)
+      }
 
       return {
         ligne: lineNum,

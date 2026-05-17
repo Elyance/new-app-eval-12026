@@ -156,25 +156,22 @@ export async function executeImportPlan(plan) {
       link_rewrite: { language: { '@_id': '1', '#text': cat.slug } }
     }, 'category')
     
-    try {
-      const res = await fetch(`${API_URL}/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml', ...authHeader },
-        body: catXml
-      })
-      if (res.ok) {
-        const text = await res.text()
-        const json = await xmlToJson(text)
-        const newId = json?.prestashop?.category?.id
-        if (newId) {
-          createdCategories[cat.key] = newId
-          console.log(`Catégorie "${cat.name}" créée (ID: ${newId})`)
-        }
-      } else {
-        console.error(`Erreur création catégorie ${cat.name}`, await res.text())
+    const res = await fetch(`${API_URL}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: catXml
+    })
+    if (res.ok) {
+      const text = await res.text()
+      const json = await xmlToJson(text)
+      const newId = json?.prestashop?.category?.id
+      if (newId) {
+        createdCategories[cat.key] = newId
+        console.log(`Catégorie "${cat.name}" créée (ID: ${newId})`)
       }
-    } catch (err) {
-      console.error(`Exception création catégorie ${cat.name}`, err)
+    } else {
+      const errText = await res.text()
+      throw new Error(`Erreur lors de la création de la catégorie "${cat.name}" : ${res.statusText}. ${errText}`)
     }
   }
 
@@ -183,68 +180,65 @@ export async function executeImportPlan(plan) {
   for (const tax of plan.taxes) {
     if (tax.rate === null || tax.rate === undefined) continue
 
-    try {
-      // 2a. Créer la Taxe
-      const taxXml = jsonToXml({
-        rate: tax.rate,
-        active: 1,
-        name: { language: { '@_id': '1', '#text': `TVA ${tax.rate}%` } }
-      }, 'tax')
-      
-      const taxRes = await fetch(`${API_URL}/taxes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml', ...authHeader },
-        body: taxXml
-      })
-      if (!taxRes.ok) {
-         console.error(`Erreur création taxe ${tax.rate}%`, await taxRes.text())
-         continue
-      }
-      const taxText = await taxRes.text()
-      const taxJson = await xmlToJson(taxText)
-      const idTax = taxJson?.prestashop?.tax?.id
+    // 2a. Créer la Taxe
+    const taxXml = jsonToXml({
+      rate: tax.rate,
+      active: 1,
+      name: { language: { '@_id': '1', '#text': `TVA ${tax.rate}%` } }
+    }, 'tax')
+    
+    const taxRes = await fetch(`${API_URL}/taxes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: taxXml
+    })
+    if (!taxRes.ok) {
+       const errText = await taxRes.text()
+       throw new Error(`Erreur lors de la création de la taxe ${tax.rate}% : ${taxRes.statusText}. ${errText}`)
+    }
+    const taxText = await taxRes.text()
+    const taxJson = await xmlToJson(taxText)
+    const idTax = taxJson?.prestashop?.tax?.id
 
-      // 2b. Créer le Groupe de Règle de Taxe
-      const taxGroupXml = jsonToXml({
-        name: `Règle TVA ${tax.rate}%`,
-        active: 1
-      }, 'tax_rule_group')
+    // 2b. Créer le Groupe de Règle de Taxe
+    const taxGroupXml = jsonToXml({
+      name: `Règle TVA ${tax.rate}%`,
+      active: 1
+    }, 'tax_rule_group')
 
-      const groupRes = await fetch(`${API_URL}/tax_rule_groups`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml', ...authHeader },
-        body: taxGroupXml
-      })
-      if (!groupRes.ok) {
-         console.error(`Erreur création tax_rule_group ${tax.rate}%`, await groupRes.text())
-         continue
-      }
-      const groupText = await groupRes.text()
-      const groupJson = await xmlToJson(groupText)
-      const idTaxRulesGroup = groupJson?.prestashop?.tax_rule_group?.id
+    const groupRes = await fetch(`${API_URL}/tax_rule_groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: taxGroupXml
+    })
+    if (!groupRes.ok) {
+       const errText = await groupRes.text()
+       throw new Error(`Erreur lors de la création du groupe de règle de taxe ${tax.rate}% : ${groupRes.statusText}. ${errText}`)
+    }
+    const groupText = await groupRes.text()
+    const groupJson = await xmlToJson(groupText)
+    const idTaxRulesGroup = groupJson?.prestashop?.tax_rule_group?.id
 
-      // 2c. Lier la taxe au groupe via une Règle de Taxe (tax_rule)
-      const taxRuleXml = jsonToXml({
-        id_tax_rules_group: idTaxRulesGroup,
-        id_tax: idTax,
-        id_country: 8, // 8 = France par défaut (modifiez selon besoin)
-        behavior: 0 // 0 = Cette taxe uniquement
-      }, 'tax_rule')
+    // 2c. Lier la taxe au groupe via une Règle de Taxe (tax_rule)
+    const taxRuleXml = jsonToXml({
+      id_tax_rules_group: idTaxRulesGroup,
+      id_tax: idTax,
+      id_country: 8, // 8 = France par défaut (modifiez selon besoin)
+      behavior: 0 // 0 = Cette taxe uniquement
+    }, 'tax_rule')
 
-      const ruleRes = await fetch(`${API_URL}/tax_rules`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml', ...authHeader },
-        body: taxRuleXml
-      })
+    const ruleRes = await fetch(`${API_URL}/tax_rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: taxRuleXml
+    })
 
-      if (ruleRes.ok) {
-        createdTaxesRules[tax.key] = idTaxRulesGroup
-        console.log(`Groupe de règles de taxe ${tax.rate}% créé avec succès (ID: ${idTaxRulesGroup})`)
-      } else {
-        console.error(`Erreur création tax_rule ${tax.rate}%`, await ruleRes.text())
-      }
-    } catch (err) {
-      console.error(`Exception création taxe ${tax.rate}%`, err)
+    if (ruleRes.ok) {
+      createdTaxesRules[tax.key] = idTaxRulesGroup
+      console.log(`Groupe de règles de taxe ${tax.rate}% créé avec succès (ID: ${idTaxRulesGroup})`)
+    } else {
+      const errText = await ruleRes.text()
+      throw new Error(`Erreur lors de la création de la règle de taxe pour le taux ${tax.rate}% : ${ruleRes.statusText}. ${errText}`)
     }
   }
 
@@ -300,41 +294,27 @@ export async function insertProducts(plan) {
       }
     }, 'product')
 
-    try {
-      const res = await fetch(`${API_URL}/products`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml', ...authHeader },
-        body: productXml
-      })
+    const res = await fetch(`${API_URL}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: productXml
+    })
 
-      if (res.ok) {
-        const text = await res.text()
-        const json = await xmlToJson(text)
-        const newId = json?.prestashop?.product?.id
-        
-        if (newId) {
-          createdProducts.push({
-            ...product,
-            id_product_prestashop: newId
-          })
-          console.log(`Produit "${product.name}" créé avec succès (ID: ${newId})`)
-
-          // Initialisation du stock si une quantité a été définie
-          /*
-          if (product.quantite > 0) {
-            console.log(`[Import] Initialisation du stock pour le produit ID ${newId} (Quantité: ${product.quantite})...`)
-            const stockSuccess = await updateStockInPrestashop(newId, 0, product.quantite)
-            if (!stockSuccess) {
-              console.error(`[Import] Échec de l'initialisation du stock pour le produit ID ${newId}`)
-            }
-          }
-          */
-        }
-      } else {
-        console.error(`Erreur création produit "${product.name}" :`, await res.text())
+    if (res.ok) {
+      const text = await res.text()
+      const json = await xmlToJson(text)
+      const newId = json?.prestashop?.product?.id
+      
+      if (newId) {
+        createdProducts.push({
+          ...product,
+          id_product_prestashop: newId
+        })
+        console.log(`Produit "${product.name}" créé avec succès (ID: ${newId})`)
       }
-    } catch (err) {
-      console.error(`Exception lors de la création du produit "${product.name}" :`, err)
+    } else {
+      const errText = await res.text()
+      throw new Error(`Erreur lors de la création du produit "${product.name}" : ${res.statusText}. ${errText}`)
     }
   }
 
@@ -486,9 +466,8 @@ export async function executeFichier2Import(rowsFichier2, planFinal) {
             createdOptions[optionName.toLowerCase()] = optionId
           }
         } else {
-          console.error(`Erreur création option ${optionName}`, await resOpt.text())
-          results.errors.push(`Erreur création attribut ${optionName}`)
-          continue
+          const errText = await resOpt.text()
+          throw new Error(`Erreur lors de la création de l'attribut de déclinaison "${optionName}" : ${resOpt.statusText}. ${errText}`)
         }
       }
 
@@ -518,9 +497,8 @@ export async function executeFichier2Import(rowsFichier2, planFinal) {
             createdOptionValues[valueKey] = valueId
           }
         } else {
-          console.error(`Erreur création valeur ${valueName}`, await resVal.text())
-          results.errors.push(`Erreur création valeur ${valueName} pour ${optionName}`)
-          continue
+          const errText = await resVal.text()
+          throw new Error(`Erreur lors de la création de la valeur d'option "${valueName}" pour "${optionName}" : ${resVal.statusText}. ${errText}`)
         }
       }
 
@@ -580,12 +558,12 @@ export async function executeFichier2Import(rowsFichier2, planFinal) {
           }
         }
       } else {
-        console.error(`Erreur création combinaison ${product.reference}-${valueName}`, await resComb.text())
-        results.errors.push(`Erreur création déclinaison ${product.reference}-${valueName}`)
+        const errText = await resComb.text()
+        throw new Error(`Erreur lors de la création de la déclinaison "${product.reference}-${valueName}" : ${resComb.statusText}. ${errText}`)
       }
     } catch (err) {
       console.error(`Exception déclinaison ${product.reference}-${row.karazany}`, err)
-      results.errors.push(`Exception déclinaison ${product.reference}-${row.karazany}`)
+      throw err
     }
   }
 
@@ -844,8 +822,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
         }, authHeader)
 
         if (!customer) {
-          results.errors.push(`Erreur création client ${row.email}`)
-          continue
+          throw new Error(`Erreur lors de la création du client réel pour l'email "${row.email}"`)
         }
       } else {
         console.log(`[Import Fichier 3] Client existant identifié ID : ${customer.id}`)
@@ -867,8 +844,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       })
 
       if (!address || !address.id) {
-        results.errors.push(`Erreur création adresse pour ${row.email}`)
-        continue
+        throw new Error(`Erreur lors de la création de l'adresse de livraison pour "${row.email}"`)
       }
 
       // 3. Résoudre tous les produits de l'achat
@@ -879,9 +855,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       for (const item of row.achat) {
         const resolved = await resolveProductAndCombination(item.reference, item.specificite_valeur, planFinal, authHeader)
         if (!resolved) {
-          console.warn(`[Import Fichier 3] Référence introuvable : ${item.reference}`)
-          results.errors.push(`Référence introuvable : ${item.reference}`)
-          continue
+          throw new Error(`Erreur lors de l'import : la référence produit "${item.reference}" dans les achats de "${row.email}" est introuvable dans la boutique`)
         }
 
         cartRows.push({
@@ -891,7 +865,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
         })
 
         const unitPriceTtc = resolved.price_wt
-        const unitPriceHt = round2(unitPriceTtc / (1 + (resolved.taxRate || 20) / 100)) // Calcul dynamique de la taxe récupérée du produit
+        const unitPriceHt = round6(unitPriceTtc / (1 + (resolved.taxRate || 20) / 100)) // Calcul dynamique de la taxe récupérée du produit
 
         orderRows.push({
           product_id: resolved.id_product,
@@ -908,8 +882,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       }
 
       if (cartRows.length === 0) {
-        results.errors.push(`Aucun article valide trouvé pour ${row.email}`)
-        continue
+        throw new Error(`Erreur : aucun article d'achat valide trouvé pour "${row.email}"`)
       }
 
       // 4. Créer le panier dans PrestaShop
@@ -922,8 +895,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       }, authHeader)
 
       if (!cartId) {
-        results.errors.push(`Erreur création panier pour ${row.email}`)
-        continue
+        throw new Error(`Erreur lors de la création du panier d'achat pour "${row.email}"`)
       }
       results.cartsCreated++
 
@@ -951,13 +923,13 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
           results.ordersCreated++
           console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
         } else {
-          results.errors.push(`Erreur conversion commande pour ${row.email}`)
+          throw new Error(`Erreur lors de la conversion du panier d'importation en commande pour "${row.email}"`)
         }
       }
 
     } catch (err) {
       console.error(`[Import Fichier 3] Exception sur la ligne de ${row.email}:`, err)
-      results.errors.push(`Exception sur la ligne de ${row.email}`)
+      throw err
     }
   }
 

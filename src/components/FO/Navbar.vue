@@ -133,34 +133,6 @@ const toggleMobileMenu = () => {
       </div>
     </div>
 
-    <!-- Menu de Navigation -->
-    <div class="navbar-menu" :class="{ active: isMobileMenuOpen }">
-      <div class="navbar-container">
-        <!-- Catégories -->
-        <ul class="categories-list">
-          <li 
-            v-for="category in categories"
-            :key="category.id"
-            class="category-item"
-          >
-            <router-link 
-              :to="`/fo/produits?cat=${category.id}`"
-              class="category-link"
-            >
-              {{ category.name }}
-            </router-link>
-          </li>
-        </ul>
-
-        <!-- Contactez-nous -->
-        <button 
-          class="contact-button"
-          @click="handleContact"
-        >
-          Contactez-nous
-        </button>
-      </div>
-    </div>
   </nav>
 </template>
 

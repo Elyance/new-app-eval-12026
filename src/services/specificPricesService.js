@@ -114,7 +114,10 @@ export function calculateFinalPrice(priceHt, taxRate, reduction) {
 
 // pour eviter les codes non necessaires dans les vue
 export function getProductPricingDisplay(productDetail, matchingCombination = null) {
-  const priceHt = Number(matchingCombination?.price || productDetail?.priceHt || productDetail?.price || 0)
+  const basePriceHt = Number(productDetail?.priceHt || productDetail?.price || 0)
+  const priceHt = matchingCombination
+    ? basePriceHt + Number(matchingCombination.price || 0)
+    : basePriceHt
   const taxRate = Number(productDetail?.taxRate || 0)
   const basePriceTtc = priceHt * (1 + taxRate / 100)
   const reduction = findBestApplicableReduction(priceHt, productDetail?.specificPrices || [], {
