@@ -120,6 +120,11 @@ const toggleMobileMenu = () => {
           </template>
 
           <!-- Panier -->
+          <router-link v-if="authStore.isLoggedIn" to="/fo/mes-commandes" class="action-button orders-button">
+            <span class="label">Mes commandes</span>
+          </router-link>
+
+          <!-- Panier -->
           <router-link to="/fo/panier" class="action-button cart-button">
             <span class="label">Panier</span>
             <span v-if="cartStore.itemCount > 0" class="badge">{{ cartStore.itemCount }}</span>

@@ -6,6 +6,7 @@ import CartPage from '../views/FO/CartPage.vue'
 import CheckoutPage from '../views/FO/CheckoutPage.vue'
 import OrderConfirmationPage from '../views/FO/OrderConfirmationPage.vue'
 import LandingPage from '../views/LandingPage.vue'
+import MyOrdersPage from '../views/FO/MyOrdersPage.vue'
 import Accueil from '../views/BO/Accueil.vue'
 import Modules from '../views/BO/Modules.vue'
 import GestionDonnees from '../views/BO/GestionDonnees.vue'
@@ -127,6 +128,12 @@ const routes = [
     path: '/fo/panier',
     name: 'Cart',
     component: CartPage,
+    meta: { hideSidebar: true }
+  },
+  {
+    path: '/fo/mes-commandes',
+    name: 'MyOrders',
+    component: MyOrdersPage,
     meta: { hideSidebar: true }
   },
   {

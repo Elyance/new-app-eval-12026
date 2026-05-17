@@ -237,6 +237,65 @@ export async function addOrderHistory(id_order, id_order_state) {
   }
 }
 
+/**
+ * Récupère les commandes d'un client donné
+ * @param {number|string} customerId
+ * @returns {Promise<Array>}
+ */
+export async function getOrdersByCustomerId(customerId) {
+  try {
+    const response = await fetch(`${API_URL}/orders?filter[id_customer]=[${customerId}]&display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+
+    const ordersNode = jsonData?.prestashop?.orders?.order || []
+    const orderArray = Array.isArray(ordersNode) ? ordersNode : [ordersNode]
+
+    return orderArray.map((order) => ({
+      id: getXmlValue(order.id),
+      id_cart: getXmlValue(order.id_cart),
+      reference: getXmlString(order.reference),
+      current_state: getXmlValue(order.current_state),
+      payment: getXmlString(order.payment),
+      total_paid: Number(getXmlValue(order.total_paid) || 0),
+      date_add: getXmlString(order.date_add),
+      productsCount: (() => {
+        const orderRowsSource = order?.associations?.order_rows?.order_row || []
+        const orderRows = Array.isArray(orderRowsSource) ? orderRowsSource : [orderRowsSource]
+
+        return orderRows.reduce((sum, row) => {
+          const quantity = Number(getXmlValue(row.product_quantity || row.quantity) || 0)
+          return sum + quantity
+        }, 0)
+      })(),
+      productsSummary: (() => {
+        const orderRowsSource = order?.associations?.order_rows?.order_row || []
+        const orderRows = Array.isArray(orderRowsSource) ? orderRowsSource : [orderRowsSource]
+        const names = orderRows
+          .map((row) => getXmlString(row.product_name))
+          .filter(Boolean)
+
+        if (!names.length) return ''
+        if (names.length <= 2) return names.join(', ')
+        return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+      })()
+    }))
+  } catch (error) {
+    console.error('Erreur dans getOrdersByCustomerId:', error)
+    return []
+  }
+}
+
 export async function getOrderStateById(id_order_state) {
   try {
     console.log(`Récupération de l'état de la commande pour id_order_state: ${id_order_state} avec type: ${typeof id_order_state}`)

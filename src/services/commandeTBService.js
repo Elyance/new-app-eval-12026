@@ -67,6 +67,32 @@ export async function getOrders() {
 }
 
 /**
+ * Récupère les commandes d'un client donné
+ * @param {number|string} customerId
+ * @returns {Promise<Array>}
+ */
+export async function getOrdersByCustomerId(customerId) {
+  try {
+    const response = await fetch(`${API_URL}/orders?filter[id_customer]=[${customerId}]&display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    return await parseOrdersResponse(xmlData)
+  } catch (error) {
+    console.error('Erreur dans getOrdersByCustomerId:', error)
+    return []
+  }
+}
+
+/**
  * Regroupe les commandes par date et calcule les totaux.
  * @returns {Promise<{orders: Array, dailyStats: Array, totalGeneral: {nbCommande: number, montant: number}}>} 
  */
