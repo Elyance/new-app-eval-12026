@@ -6,27 +6,6 @@
         <h3 class="mb-1 fw-bold">Liste des produits</h3>
         <p class="text-muted mb-0">Liste alimentée depuis `getProducts()` avec popup d’ajout de stock.</p>
       </div>
-
-      <div class="d-flex gap-2 flex-wrap">
-        <div class="card border-0 shadow-sm">
-          <div class="card-body py-2 px-3">
-            <small class="text-muted d-block">Produits</small>
-            <strong>{{ products.length }}</strong>
-          </div>
-        </div>
-        <div class="card border-0 shadow-sm bg-dark text-white">
-          <div class="card-body py-2 px-3">
-            <small class="text-white-50 d-block">Actifs</small>
-            <strong>{{ activeCount }}</strong>
-          </div>
-        </div>
-        <div class="card border-0 shadow-sm">
-          <div class="card-body py-2 px-3">
-            <small class="text-muted d-block">Stock total</small>
-            <strong>{{ totalStock }}</strong>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div class="card border-0 shadow-sm">
@@ -336,12 +315,6 @@ export default {
     this.loadProducts()
   },
   computed: {
-    activeCount() {
-      return this.products.filter(product => product.state === 'Actif').length
-    },
-    totalStock() {
-      return this.products.reduce((sum, product) => sum + Number(product.quantity || 0), 0)
-    },
     hasCombinations() {
       return Array.isArray(this.selectedProduct?.combinations) && this.selectedProduct.combinations.length > 0
     },
