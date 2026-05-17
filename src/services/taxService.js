@@ -1,10 +1,6 @@
 import { xmlToJson } from '../utils/xmlParser'
 import { API_URL } from '../constants/constant'
-
-function toNumber(value) {
-  const parsed = Number(String(value ?? '').replace(',', '.'))
-  return Number.isFinite(parsed) ? parsed : 0
-}
+import { toNumber } from '../utils/importFormatters'
 
 function extractTaxRulesGroupId(product) {
   return Number(product?.id_tax_rules_group?.['#text'] || product?.id_tax_rules_group || 0)
@@ -39,7 +35,7 @@ export async function getProductTaxRate(product) {
     const taxJson = await xmlToJson(taxXml)
 
     const tax = taxJson?.prestashop?.tax || taxJson?.prestashop?.taxes?.tax || null
-    const taxRate = toNumber(tax?.rate?.['#text'] || tax?.rate)
+    const taxRate = toNumber(tax?.rate?.['#text'] || tax?.rate) || 0
 
     return taxRate
   } catch (error) {
