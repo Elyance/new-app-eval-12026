@@ -177,7 +177,8 @@ export function traitementFichier1(rows = []) {
       prix_ttc: parseLocalizedNumber(row.prix_ttc),
       taxe: normalizePercentage(row.Taxe || row.taxe),
       categorie: normalizeText(row.categorie),
-      prix_achat: parseLocalizedNumber(row.prix_achat)
+      prix_achat: parseLocalizedNumber(row.prix_achat),
+      quantite: parseLocalizedNumber(row.quantite || row.stock || row.quantity || row['Quantité'] || row['Quantite']) || 0
     }))
 }
 

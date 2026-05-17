@@ -2,6 +2,7 @@ import { normalizeText, slugify, toNumber, round2 } from '../utils/importFormatt
 import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 import JSZip from 'jszip'
+import { updateStockInPrestashop } from './stockHelperService'
 
 
 /*
@@ -51,7 +52,8 @@ function splitRowFile1(row) {
       price_ht: priceHt,
       taxe: taxRate,
       category_name: categoryName,
-      prix_achat: toNumber(row.prix_achat)
+      prix_achat: toNumber(row.prix_achat),
+      quantite: toNumber(row.quantite) || 0
     }
   }
 }
@@ -307,6 +309,17 @@ export async function insertProducts(plan) {
             id_product_prestashop: newId
           })
           console.log(`Produit "${product.name}" créé avec succès (ID: ${newId})`)
+
+          // Initialisation du stock si une quantité a été définie
+          /*
+          if (product.quantite > 0) {
+            console.log(`[Import] Initialisation du stock pour le produit ID ${newId} (Quantité: ${product.quantite})...`)
+            const stockSuccess = await updateStockInPrestashop(newId, 0, product.quantite)
+            if (!stockSuccess) {
+              console.error(`[Import] Échec de l'initialisation du stock pour le produit ID ${newId}`)
+            }
+          }
+          */
         }
       } else {
         console.error(`Erreur création produit "${product.name}" :`, await res.text())
