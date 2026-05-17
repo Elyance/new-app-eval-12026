@@ -1,0 +1,13 @@
+<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
+<stock_mvt>
+	<id_product><![CDATA[1]]></id_product>
+	<id_product_attribute><![CDATA[1]]></id_product_attribute>
+	<id_employee><![CDATA[1]]></id_employee>
+	<id_stock><![CDATA[20]]></id_stock>
+	<id_stock_mvt_reason><![CDATA[1]]></id_stock_mvt_reason>
+	<physical_quantity><![CDATA[5]]></physical_quantity>
+	<sign><![CDATA[1]]></sign>
+	<price_te><![CDATA[0]]></price_te>
+	<date_add><![CDATA[2026-05-16 20:00:00]]></date_add>
+</stock_mvt>
+</prestashop>

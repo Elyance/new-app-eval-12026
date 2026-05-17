@@ -184,7 +184,7 @@
           />
 
           <div class="alert alert-info mt-3 mb-0 py-2">
-            Cette version reste statique, le bouton modifie seulement la liste locale pour l’instant.
+            Le stock sera mis à jour directement dans PrestaShop.
           </div>
 
           <div v-if="modalError" class="alert alert-danger mt-3 mb-0 py-2">
@@ -206,11 +206,7 @@
 <script>
 import { getProducts, getProductDetail } from '../../../services/productService'
 import {
-  computeMatchingCombination,
-  buildStockMovementPayload,
-  buildStockAvailablePayload,
-  generateStockMovementXml,
-  generateStockAvailableXml
+  updateStockInPrestashop
 } from '../../../services/stockHelperService'
 
 export default {
@@ -308,7 +304,7 @@ export default {
       this.savingStock = false
       this.modalError = null
     },
-    confirmAddStock() {
+    async confirmAddStock() {
       const add = Number(this.stockToAdd) || 0
       const hasCombinations = Array.isArray(this.selectedProduct?.combinations) && this.selectedProduct.combinations.length > 0
 
@@ -345,51 +341,35 @@ export default {
       this.savingStock = true
       this.modalError = null
 
-      // Determine current quantity before update
-      const qttBefore = selectedCombination?.inStock ?? Number(this.selectedProduct.quantity ?? 0)
-
-      // Build example payloads (not sent) using helper service and log them
-      const stockMovementPayload = buildStockMovementPayload({
-        productId: this.selectedProduct.id,
-        combinationId: selectedCombination?.id || 0,
-        quantity: add,
-        note: 'Ajout effectué depuis BO (simulé)'
-      })
-
-      const stockAvailablePayload = buildStockAvailablePayload({
-        productId: this.selectedProduct.id,
-        combinationId: selectedCombination?.id || 0,
-        quantity: qttBefore + add
-      })
-
       try {
-        const xmlStockMovement = generateStockMovementXml(stockMovementPayload)
-        const xmlStockAvailable = generateStockAvailableXml(stockAvailablePayload)
+        const success = await updateStockInPrestashop(this.selectedProduct.id, selectedCombination?.id || 0, add)
+        
+        if (success) {
+          // locally update view
+          if (selectedCombination) {
+            selectedCombination.inStock = (selectedCombination.inStock || 0) + add
+          }
+          if (this.selectedProduct) {
+             // For the modal UI
+            this.selectedProduct.quantity = Number(this.selectedProduct.quantity || 0) + add
+          }
+          // Update the list reference
+          const prodInList = this.products.find(p => p.id === this.selectedProduct.id)
+          if (prodInList) {
+            prodInList.quantity = Number(prodInList.quantity || 0) + add
+          }
 
-        console.log('Ajout de stock (simulation) — données :', {
-          productId: this.selectedProduct.id,
-          productName: this.selectedProduct.name,
-          quantityToAdd: add,
-          mode: hasCombinations ? 'combination' : 'automatic',
-          selectedCombination,
-          qttBefore,
-          xmlStockMovement,
-          xmlStockAvailable
-        })
-      } catch (err) {
-        console.error('Erreur lors de la génération des XML de simulation :', err)
-      }
-
-      // locally update view (simulate)
-      setTimeout(() => {
-        if (selectedCombination) {
-          selectedCombination.inStock = (selectedCombination.inStock || 0) + add
-        } else if (this.selectedProduct) {
-          this.selectedProduct.quantity = Number(this.selectedProduct.quantity || 0) + add
+          this.savingStock = false
+          this.closeModal()
+        } else {
+          this.modalError = "Erreur de l'API lors de la mise à jour."
+          this.savingStock = false
         }
+      } catch (err) {
+        console.error('Erreur API lors de la mise à jour du stock :', err)
+        this.modalError = "Erreur de communication avec l'API."
         this.savingStock = false
-        this.closeModal()
-      }, 450)
+      }
     },
     combinationLabel(combination) {
       const reference = combination.reference ? ` - ${combination.reference}` : ''
