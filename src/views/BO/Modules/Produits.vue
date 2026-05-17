@@ -41,7 +41,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="product in products" :key="product.id">
+            <tr v-for="product in paginatedProducts" :key="product.id">
               <td class="fw-semibold">#{{ product.id }}</td>
               <td>
                 <img :src="product.image" :alt="product.name" class="rounded" width="60" height="60" />
@@ -66,6 +66,45 @@
             </tr>
           </tbody>
         </table>
+        
+        <!-- Pagination BO -->
+        <div class="card-footer bg-white border-top d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+          <span class="text-muted small">
+            Affichage de {{ products.length ? (currentPage - 1) * pageSize + 1 : 0 }} à {{ Math.min(currentPage * pageSize, products.length) }} sur {{ products.length }} produits
+          </span>
+          <nav v-if="totalPages > 1">
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                <button class="page-link shadow-none" @click="currentPage = 1" title="Première page">
+                  &laquo;&laquo;
+                </button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                <button class="page-link shadow-none" @click="currentPage--" title="Précédent">
+                  &laquo;
+                </button>
+              </li>
+              <li 
+                v-for="page in visiblePages" 
+                :key="page" 
+                class="page-item" 
+                :class="{ active: currentPage === page }"
+              >
+                <button class="page-link shadow-none" @click="currentPage = page">{{ page }}</button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+                <button class="page-link shadow-none" @click="currentPage++" title="Suivant">
+                  &raquo;
+                </button>
+              </li>
+              <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+                <button class="page-link shadow-none" @click="currentPage = totalPages" title="Dernière page">
+                  &raquo;&raquo;
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
       </div>
     </div>
 
@@ -308,7 +347,10 @@ export default {
       selectedHistoryProduct: null,
       historyMovements: [],
       selectedHistoryDate: '',
-      historyLoading: false
+      historyLoading: false,
+      // Pagination
+      currentPage: 1,
+      pageSize: 10
     }
   },
   created() {
@@ -333,6 +375,26 @@ export default {
       return this.filteredMovements
         .filter(m => m.sign < 0)
         .reduce((sum, m) => sum + m.quantity, 0)
+    },
+    totalPages() {
+      return Math.ceil(this.products.length / this.pageSize)
+    },
+    paginatedProducts() {
+      return this.products.slice((this.currentPage - 1) * this.pageSize, this.currentPage * this.pageSize)
+    },
+    visiblePages() {
+      const maxPages = 5
+      const half = Math.floor(maxPages / 2)
+      let start = Math.max(1, this.currentPage - half)
+      let end = Math.min(this.totalPages, start + maxPages - 1)
+      if (end - start + 1 < maxPages) {
+        start = Math.max(1, end - maxPages + 1)
+      }
+      const pages = []
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      return pages
     }
   },
   methods: {
@@ -342,6 +404,7 @@ export default {
 
       try {
         const fetchedProducts = await getProducts()
+        this.currentPage = 1
         this.products = fetchedProducts.map((product) => ({
           id: product.id,
           image: product.image,

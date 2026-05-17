@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import ProductCard from '../../components/FO/ProductCard.vue'
 import { getProducts } from '../../services/productService'
 import { getCategories } from '../../services/CategorieService'
@@ -9,6 +9,9 @@ const products = ref([])
 const categories = ref([])
 const isLoading = ref(false)
 const error = ref(null)
+
+const currentPage = ref(1)
+const pageSize = ref(8)
 
 const searchCriteria = ref({
   name: '',
@@ -20,6 +23,7 @@ const searchCriteria = ref({
 const loadProducts = async () => {
   isLoading.value = true
   error.value = null
+  currentPage.value = 1
   
   try {
     products.value = await getProducts(searchCriteria.value)
@@ -45,10 +49,12 @@ const loadCategories = async () => {
 }
 
 const handleSearch = () => {
+  currentPage.value = 1
   loadProducts()
 }
 
 const resetSearch = () => {
+  currentPage.value = 1
   searchCriteria.value = {
     name: '',
     categoryId: '',
@@ -68,6 +74,28 @@ const handleToggleFavorite = (productId) => {
 const handlePreview = (productId) => {
   console.log('Aperçu du produit:', productId)
 }
+
+const totalPages = computed(() => Math.ceil(products.value.length / pageSize.value))
+
+const paginatedProducts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return products.value.slice(start, start + pageSize.value)
+})
+
+const visiblePages = computed(() => {
+  const maxPages = 5
+  const half = Math.floor(maxPages / 2)
+  let start = Math.max(1, currentPage.value - half)
+  let end = Math.min(totalPages.value, start + maxPages - 1)
+  if (end - start + 1 < maxPages) {
+    start = Math.max(1, end - maxPages + 1)
+  }
+  const pages = []
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
 </script>
 
 <template>
@@ -121,14 +149,63 @@ const handlePreview = (productId) => {
       </div>
 
       <!-- Products Grid -->
-      <div v-else class="products-grid">
-        <ProductCard
-          v-for="product in products"
-          :key="product.id"
-          :product="product"
-          @toggle-favorite="handleToggleFavorite"
-          @preview="handlePreview"
-        />
+      <div v-else>
+        <div class="products-grid">
+          <ProductCard
+            v-for="product in paginatedProducts"
+            :key="product.id"
+            :product="product"
+            @toggle-favorite="handleToggleFavorite"
+            @preview="handlePreview"
+          />
+        </div>
+
+        <!-- Pagination FO -->
+        <div v-if="totalPages > 1" class="fo-pagination">
+          <button 
+            class="btn-page-arrow" 
+            :disabled="currentPage === 1" 
+            @click="currentPage = 1"
+            title="Première page"
+          >
+            &laquo;&laquo;
+          </button>
+          <button 
+            class="btn-page-arrow" 
+            :disabled="currentPage === 1" 
+            @click="currentPage--"
+            title="Précédent"
+          >
+            &laquo;
+          </button>
+          
+          <button 
+            v-for="page in visiblePages" 
+            :key="page" 
+            class="btn-page-number" 
+            :class="{ active: currentPage === page }"
+            @click="currentPage = page"
+          >
+            {{ page }}
+          </button>
+
+          <button 
+            class="btn-page-arrow" 
+            :disabled="currentPage === totalPages" 
+            @click="currentPage++"
+            title="Suivant"
+          >
+            &raquo;
+          </button>
+          <button 
+            class="btn-page-arrow" 
+            :disabled="currentPage === totalPages" 
+            @click="currentPage = totalPages"
+            title="Dernière page"
+          >
+            &raquo;&raquo;
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -361,5 +438,55 @@ h1 {
   h1 {
     font-size: 1.5rem;
   }
+}
+
+/* Pagination FO */
+.fo-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 40px;
+  padding: 16px 0;
+}
+
+.btn-page-number, .btn-page-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background-color: white;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-page-number:hover, .btn-page-arrow:not(:disabled):hover {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  color: #111827;
+  transform: translateY(-1px);
+}
+
+.btn-page-number.active {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2), 0 2px 4px -1px rgba(59, 130, 246, 0.1);
+}
+
+.btn-page-arrow:disabled {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
+  color: #d1d5db;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 </style>

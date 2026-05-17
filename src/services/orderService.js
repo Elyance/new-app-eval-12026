@@ -176,6 +176,61 @@ export async function createOrder(orderData) {
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Réponse erreur PrestaShop (order):', errorText)
+
+      // Fallback: Tentative de récupération de la commande si elle a été créée malgré l'erreur / le warning de hook
+      try {
+        console.log(`[orderService] Erreur API lors de la création de la commande. Tentative de secours de récupération de la commande pour le panier ID : ${order.id_cart}...`)
+        const checkRes = await fetch(`${API_URL}/orders?filter[id_cart]=[${order.id_cart}]&display=full`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+          }
+        })
+        if (checkRes.ok) {
+          const checkXml = await checkRes.text()
+          const checkJson = await xmlToJson(checkXml)
+          const matchedOrder = checkJson?.prestashop?.orders?.order
+          
+          if (matchedOrder) {
+            const orderObj = Array.isArray(matchedOrder) ? matchedOrder[0] : matchedOrder
+            const createdOrderId = getXmlValue(orderObj.id)
+            if (createdOrderId) {
+              console.log(`[orderService] Commande récupérée avec succès via secours ! ID : ${createdOrderId}`)
+              
+              // Ajouter la ligne d'historique de statut pour la commande et enregistrer les mouvements de stock
+              await addOrderHistory(createdOrderId, 2)
+
+              // Enregistrer le mouvement de stock pour chaque produit de la commande
+              const rows = orderData.order_rows || []
+              for (const row of rows) {
+                try {
+                  console.log(`[orderService] Enregistrement mouvement stock (-${row.product_quantity}) pour produit ${row.product_id} (déclinaison: ${row.product_attribute_id || 0})`)
+                  await createStockMovement(
+                    row.product_id,
+                    row.product_attribute_id || 0,
+                    -row.product_quantity,
+                    createdOrderId
+                  )
+                } catch (errMvt) {
+                  console.error(`[orderService] Erreur lors de l'enregistrement du mouvement de stock pour le produit ${row.product_id}:`, errMvt)
+                }
+              }
+
+              return {
+                id: createdOrderId,
+                reference: getXmlString(orderObj.reference),
+                id_cart: getXmlValue(orderObj.id_cart),
+                id_customer: getXmlValue(orderObj.id_customer),
+                total_paid: getXmlValue(orderObj.total_paid),
+                status: (await getOrderStateById(2))?.name || 'Etat inconnu'
+              }
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.error('[orderService] Échec de la vérification de secours:', checkErr)
+      }
+
       throw new Error(`Erreur API PrestaShop: ${response.status}`)
     }
 

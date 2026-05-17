@@ -908,22 +908,28 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       // 6. Si paiement accepté -> Création de la commande correspondante
       if (row.etat.toLowerCase() === 'paiement accepte' || row.etat.toLowerCase() === 'paiement accepté') {
         console.log(`[Import Fichier 3] Conversion du panier ID ${cartId} en commande...`)
-        const order = await createOrder({
-          id_address_delivery: address.id,
-          id_address_invoice: address.id,
-          id_cart: cartId,
-          id_customer: customer.id,
-          total_paid: totalPaidTtc,
-          secure_key: customer.secure_key,
-          order_rows: orderRows,
-          date_add: convertDateToIso(row.date) + ' 12:00:00'
-        })
+        try {
+          const order = await createOrder({
+            id_address_delivery: address.id,
+            id_address_invoice: address.id,
+            id_cart: cartId,
+            id_customer: customer.id,
+            total_paid: totalPaidTtc,
+            secure_key: customer.secure_key,
+            order_rows: orderRows,
+            date_add: convertDateToIso(row.date) + ' 12:00:00'
+          })
 
-        if (order && order.id) {
-          results.ordersCreated++
-          console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
-        } else {
-          throw new Error(`Erreur lors de la conversion du panier d'importation en commande pour "${row.email}"`)
+          if (order && order.id) {
+            results.ordersCreated++
+            console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
+          } else {
+            console.error(`[Import Fichier 3] Échec de la conversion du panier en commande pour "${row.email}"`)
+            results.errors.push(`Erreur conversion commande pour ${row.email}`)
+          }
+        } catch (orderErr) {
+          console.error(`[Import Fichier 3] Exception lors de la création de la commande pour "${row.email}":`, orderErr)
+          results.errors.push(`Erreur commande ${row.email}: ${orderErr.message}`)
         }
       }
 
