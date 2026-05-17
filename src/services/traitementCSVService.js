@@ -196,7 +196,47 @@ export function traitementFichier2(rows = []) {
     }))
 }
 
+// Parse la chaîne de caractères [("T_01";3;"ngoza"),("C_03";1;"")] en tableau d'objets
+export function parseAchat(achatStr) {
+  const normalized = normalizeText(achatStr)
+  if (!normalized) return []
+
+  const results = []
+  // Capture les groupes de la forme ("REF";QUANTITE;"SPECIFICITE")
+  const matches = normalized.match(/\("([^"]+)"\s*;\s*(\d+)\s*;\s*"([^"]*)"\)/g)
+  if (matches) {
+    for (const m of matches) {
+      const parts = m.match(/\("([^"]+)"\s*;\s*(\d+)\s*;\s*"([^"]*)"\)/)
+      if (parts) {
+        results.push({
+          reference: normalizeText(parts[1]),
+          quantite: parseInt(parts[2], 10) || 1,
+          specificite_valeur: normalizeText(parts[3])
+        })
+      }
+    }
+  }
+  return results
+}
+
+export function traitementFichier3(rows = []) {
+  const normalizedRows = Array.isArray(rows) ? rows : []
+  return normalizedRows
+    .filter((row) => !isEmptyRow(row))
+    .map((row, index) => ({
+      ligne: index + 1,
+      date: parseAnyDate(row.date || row.Date),
+      nom: normalizeText(row.nom || row.Nom || row.Name || row.name),
+      email: normalizeText(row.email || row.Email || row.Mail || row.mail),
+      pwd: normalizeText(row.pwd || row.password || row.Password || row.passwd),
+      adresse: normalizeText(row.adresse || row.Adresse || row.Address || row.address),
+      achat: parseAchat(row.achat || row.Achat || row.order || row.Order),
+      etat: normalizeText(row.etat || row.Etat || row.status || row.Status)
+    }))
+}
+
 export default {
   traitementFichier1,
-  traitementFichier2
+  traitementFichier2,
+  traitementFichier3
 }

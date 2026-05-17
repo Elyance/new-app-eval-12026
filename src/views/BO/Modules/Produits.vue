@@ -275,9 +275,10 @@ export default {
       return Number(value).toFixed(2)
     },
     stockBadgeClass(quantity) {
-      if (quantity === 0) return 'text-bg-danger'
-      if (quantity < 10) return 'text-bg-warning'
-      return 'text-bg-info'
+      // if (quantity === 0) return 'text-bg-danger'
+      // if (quantity < 10) return 'text-bg-warning'
+      // return 'text-bg-info'
+      return 'text-bg-light border'
     },
     // Ouvre le modal d'ajout de stock et récupère le détail (combinations, options)
     openAddStock(product) {

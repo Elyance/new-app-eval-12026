@@ -3,6 +3,7 @@ import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 import JSZip from 'jszip'
 import { updateStockInPrestashop } from './stockHelperService'
+import { createAddress, createOrder } from './orderService'
 
 
 /*
@@ -580,11 +581,377 @@ export async function executeFichier2Import(rowsFichier2, planFinal) {
   return results
 }
 
+/**
+ * findCustomerByEmail(email, authHeader)
+ * Vérifie si le client existe déjà dans PrestaShop à partir de son email.
+ */
+async function findCustomerByEmail(email, authHeader) {
+  try {
+    const res = await fetch(`${API_URL}/customers?filter[email]=[${email}]&display=full`, {
+      method: 'GET',
+      headers: authHeader
+    })
+
+    if (res.ok) {
+      const text = await res.text()
+      const json = await xmlToJson(text)
+      const cust = json?.prestashop?.customers?.customer
+      if (cust) {
+        const c = Array.isArray(cust) ? cust[0] : cust
+        return {
+          id: Number(c.id),
+          firstname: c.firstname,
+          lastname: c.lastname,
+          email: c.email,
+          secure_key: c.secure_key
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[Import Fichier 3] Erreur findCustomerByEmail pour ${email}:`, err)
+  }
+  return null
+}
+
+/**
+ * createRealCustomer(customerData, authHeader)
+ * Crée un compte client réel dans PrestaShop (non invité) avec le mot de passe spécifié.
+ */
+async function createRealCustomer(customerData, authHeader) {
+  try {
+    const customerXml = jsonToXml({
+      firstname: customerData.firstname,
+      lastname: customerData.lastname,
+      email: customerData.email,
+      passwd: customerData.passwd,
+      is_guest: 0,
+      active: 1,
+      id_default_group: 3, // Client
+      id_lang: 1,
+      associations: {
+        groups: {
+          group: { id: 3 }
+        }
+      }
+    }, 'customer')
+
+    const res = await fetch(`${API_URL}/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: customerXml
+    })
+
+    if (res.ok) {
+      const text = await res.text()
+      const json = await xmlToJson(text)
+      const cust = json?.prestashop?.customer
+      if (cust) {
+        return {
+          id: Number(cust.id),
+          firstname: cust.firstname,
+          lastname: cust.lastname,
+          email: cust.email,
+          secure_key: cust.secure_key
+        }
+      }
+    } else {
+      console.error(`[Import Fichier 3] Erreur API création client:`, await res.text())
+    }
+  } catch (err) {
+    console.error(`[Import Fichier 3] Exception createRealCustomer:`, err)
+  }
+  return null
+}
+
+/**
+ * createImportCart(cartData, authHeader)
+ * Crée un panier multi-produits pour un client importé.
+ */
+async function createImportCart(cartData, authHeader) {
+  try {
+    const cartXml = jsonToXml({
+      id_currency: 1,
+      id_lang: 1,
+      id_customer: cartData.id_customer,
+      id_address_delivery: cartData.id_address_delivery,
+      id_address_invoice: cartData.id_address_invoice,
+      associations: {
+        cart_rows: {
+          cart_row: cartData.cart_rows
+        }
+      }
+    }, 'cart')
+
+    const res = await fetch(`${API_URL}/carts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/xml', ...authHeader },
+      body: cartXml
+    })
+
+    if (res.ok) {
+      const text = await res.text()
+      const json = await xmlToJson(text)
+      const cart = json?.prestashop?.cart
+      if (cart) {
+        return Number(cart.id)
+      }
+    } else {
+      console.error(`[Import Fichier 3] Erreur API création panier:`, await res.text())
+    }
+  } catch (err) {
+    console.error(`[Import Fichier 3] Exception createImportCart:`, err)
+  }
+  return null
+}
+
+/**
+ * resolveProductAndCombination(reference, specValue, planFinal, authHeader)
+ * Résout les IDs de produits et de déclinaisons de manière intelligente.
+ */
+async function resolveProductAndCombination(reference, specValue, planFinal, authHeader) {
+  try {
+    // 1. Chercher le produit dans notre plan d'import
+    let product = planFinal.createdProducts?.find(
+      (p) => String(p.reference).toLowerCase().trim() === String(reference).toLowerCase().trim()
+    )
+
+    let id_product = product?.id_product_prestashop
+    let name = product?.name || reference
+    let taxRate = product ? (toNumber(product.taxe) || 0) : 20
+    let priceHt = product ? (toNumber(product.price_ht) || 0) : 0
+
+    // Si le produit n'est pas dans le planFinal, on tente de le retrouver via l'API de PrestaShop
+    if (!id_product) {
+      const resProd = await fetch(`${API_URL}/products?filter[reference]=[${reference}]&display=full`, {
+        method: 'GET',
+        headers: authHeader
+      })
+      if (resProd.ok) {
+        const text = await resProd.text()
+        const json = await xmlToJson(text)
+        const pNode = json?.prestashop?.products?.product
+        if (pNode) {
+          const singleP = Array.isArray(pNode) ? pNode[0] : pNode
+          id_product = Number(singleP.id)
+          name = singleP.name?.language?.['#text'] || singleP.name?.language || reference
+          priceHt = Number(singleP.price || 0)
+        }
+      }
+    }
+
+    if (!id_product) return null
+
+    // 2. Si pas de spécification de variante (produit simple)
+    if (!specValue) {
+      return {
+        id_product,
+        name,
+        price_wt: round2(priceHt * (1 + taxRate / 100)),
+        id_product_attribute: 0
+      }
+    }
+
+    // 3. Si variante, on cherche la combinaison par sa référence (ex: T_01-ngoza)
+    const combRef = `${reference}-${specValue}`
+    const resComb = await fetch(`${API_URL}/combinations?filter[reference]=[${combRef}]&display=full`, {
+      method: 'GET',
+      headers: authHeader
+    })
+
+    if (resComb.ok) {
+      const textComb = await resComb.text()
+      const jsonComb = await xmlToJson(textComb)
+      const combNode = jsonComb?.prestashop?.combinations?.combination
+      if (combNode) {
+        const singleC = Array.isArray(combNode) ? combNode[0] : combNode
+        const combId = Number(singleC.id)
+        const combPriceImpact = Number(singleC.price || 0)
+        const combPriceHt = priceHt + combPriceImpact
+        return {
+          id_product,
+          name: `${name} - ${specValue}`,
+          price_wt: round2(combPriceHt * (1 + taxRate / 100)),
+          id_product_attribute: combId
+        }
+      }
+    }
+
+    // Fallback simple si pas de déclinaison trouvée sur l'API
+    return {
+      id_product,
+      name,
+      price_wt: round2(priceHt * (1 + taxRate / 100)),
+      id_product_attribute: 0
+    }
+  } catch (err) {
+    console.error(`[Import Fichier 3] Erreur dans resolveProductAndCombination pour ${reference}:`, err)
+    return null
+  }
+}
+
+/**
+ * executeFichier3Import(rowsFichier3, planFinal)
+ * Parcourt les lignes du Fichier 3 pour :
+ * 1) Créer les clients (comptes réels actifs).
+ * 2) Créer leurs adresses associées.
+ * 3) Résoudre les produits et déclinaisons.
+ * 4) Créer les paniers (`carts`).
+ * 5) Convertir les paniers en commandes (`orders`) payées si spécifié.
+ */
+export async function executeFichier3Import(rowsFichier3, planFinal) {
+  const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+  
+  const results = {
+    cartsCreated: 0,
+    ordersCreated: 0,
+    errors: []
+  }
+
+  for (const row of rowsFichier3) {
+    try {
+      console.log(`[Import Fichier 3] Traitement de l'achat pour ${row.nom} (${row.email})...`)
+
+      // 1. Gérer le client
+      let customer = await findCustomerByEmail(row.email, authHeader)
+      if (!customer) {
+        console.log(`[Import Fichier 3] Création du compte client réel pour : ${row.nom}`)
+        const nameParts = row.nom.split(' ')
+        const firstname = nameParts[0] || 'Client'
+        const lastname = nameParts.slice(1).join(' ') || nameParts[0] || 'Import'
+
+        customer = await createRealCustomer({
+          firstname,
+          lastname,
+          email: row.email,
+          passwd: row.pwd
+        }, authHeader)
+
+        if (!customer) {
+          results.errors.push(`Erreur création client ${row.email}`)
+          continue
+        }
+      } else {
+        console.log(`[Import Fichier 3] Client existant identifié ID : ${customer.id}`)
+      }
+
+      // 2. Gérer l'adresse
+      console.log(`[Import Fichier 3] Création de l'adresse pour le client ID : ${customer.id}`)
+      const addressParts = row.adresse.split(' ')
+      const postcode = addressParts.find(p => /^\d{5}$/.test(p)) || '10100'
+
+      const address = await createAddress({
+        id_customer: customer.id,
+        firstname: customer.firstname,
+        lastname: customer.lastname,
+        address1: row.adresse,
+        postcode: postcode,
+        city: row.adresse,
+        id_country: 8 // France
+      })
+
+      if (!address || !address.id) {
+        results.errors.push(`Erreur création adresse pour ${row.email}`)
+        continue
+      }
+
+      // 3. Résoudre tous les produits de l'achat
+      const cartRows = []
+      const orderRows = []
+      let totalPaidTtc = 0
+
+      for (const item of row.achat) {
+        const resolved = await resolveProductAndCombination(item.reference, item.specificite_valeur, planFinal, authHeader)
+        if (!resolved) {
+          console.warn(`[Import Fichier 3] Référence introuvable : ${item.reference}`)
+          results.errors.push(`Référence introuvable : ${item.reference}`)
+          continue
+        }
+
+        cartRows.push({
+          id_product: resolved.id_product,
+          id_product_attribute: resolved.id_product_attribute,
+          quantity: item.quantite
+        })
+
+        const unitPriceTtc = resolved.price_wt
+        const unitPriceHt = round2(unitPriceTtc / 1.20) // Taxe 20% par défaut pour le total
+
+        orderRows.push({
+          product_id: resolved.id_product,
+          product_attribute_id: resolved.id_product_attribute,
+          product_quantity: item.quantite,
+          product_name: resolved.name,
+          product_reference: item.reference,
+          product_price: unitPriceHt,
+          unit_price_tax_incl: unitPriceTtc,
+          unit_price_tax_excl: unitPriceHt
+        })
+
+        totalPaidTtc += unitPriceTtc * item.quantite
+      }
+
+      if (cartRows.length === 0) {
+        results.errors.push(`Aucun article valide trouvé pour ${row.email}`)
+        continue
+      }
+
+      // 4. Créer le panier dans PrestaShop
+      console.log(`[Import Fichier 3] Création du panier pour le client ID : ${customer.id}`)
+      const cartId = await createImportCart({
+        id_customer: customer.id,
+        id_address_delivery: address.id,
+        id_address_invoice: address.id,
+        cart_rows: cartRows
+      }, authHeader)
+
+      if (!cartId) {
+        results.errors.push(`Erreur création panier pour ${row.email}`)
+        continue
+      }
+      results.cartsCreated++
+
+      // 5. Si panier simple (état vide ou "dans le panier")
+      if (!row.etat || row.etat.toLowerCase() === 'dans le panier') {
+        console.log(`[Import Fichier 3] Ligne finalisée comme panier simple ID : ${cartId}`)
+        continue
+      }
+
+      // 6. Si paiement accepté -> Création de la commande correspondante
+      if (row.etat.toLowerCase() === 'paiement accepte' || row.etat.toLowerCase() === 'paiement accepté') {
+        console.log(`[Import Fichier 3] Conversion du panier ID ${cartId} en commande...`)
+        const order = await createOrder({
+          id_address_delivery: address.id,
+          id_address_invoice: address.id,
+          id_cart: cartId,
+          id_customer: customer.id,
+          total_paid: totalPaidTtc,
+          secure_key: customer.secure_key,
+          order_rows: orderRows
+        })
+
+        if (order && order.id) {
+          results.ordersCreated++
+          console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
+        } else {
+          results.errors.push(`Erreur conversion commande pour ${row.email}`)
+        }
+      }
+
+    } catch (err) {
+      console.error(`[Import Fichier 3] Exception sur la ligne de ${row.email}:`, err)
+      results.errors.push(`Exception sur la ligne de ${row.email}`)
+    }
+  }
+
+  return results
+}
+
 export default {
   buildFichier1ImportPlan,
   logFichier1ImportPlan,
   executeImportPlan,
   insertProducts,
   uploadProductImages,
-  executeFichier2Import
+  executeFichier2Import,
+  executeFichier3Import
 }

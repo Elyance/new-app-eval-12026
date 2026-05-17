@@ -49,8 +49,8 @@
 // 5) executeImportPlan : crée les catégories et les taxes via l'API
 // 6) insertProducts : insère les produits via l'API
 import { validateImportFiles, getImportFileSummary, parseCsvFiles } from '../../../services/importService'
-import { traitementFichier1, traitementFichier2 } from '../../../services/traitementCSVService'
-import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts, uploadProductImages, executeFichier2Import } from '../../../services/traitementDonneesService'
+import { traitementFichier1, traitementFichier2, traitementFichier3 } from '../../../services/traitementCSVService'
+import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts, uploadProductImages, executeFichier2Import, executeFichier3Import } from '../../../services/traitementDonneesService'
 
 export default {
   name: 'ImportStatic',
@@ -125,6 +125,18 @@ export default {
             console.log('[ImportStatic] Lancement de l\'importation des déclinaisons et stocks (Fichier 2)...')
             const resultFichier2 = await executeFichier2Import(fichier2Traite, planFinal)
             console.log('[ImportStatic] Importation Fichier 2 terminée !', resultFichier2)
+          }
+
+          // 9) Traitement et Importation du Fichier 3 (Clients, Paniers et Commandes)
+          const fichier3 = parsedCsvFiles[2]
+          if (fichier3) {
+            console.log('[ImportStatic] CSV 3 brut', fichier3.rows)
+            const fichier3Traite = traitementFichier3(fichier3.rows)
+            console.log('[ImportStatic] CSV 3 traité', fichier3Traite)
+
+            console.log('[ImportStatic] Lancement de l\'importation des clients, paniers et commandes (Fichier 3)...')
+            const resultFichier3 = await executeFichier3Import(fichier3Traite, planFinal)
+            console.log('[ImportStatic] Importation Fichier 3 terminée !', resultFichier3)
           }
 
           console.log('[ImportStatic] Import complet terminé avec succès !', planFinal)
