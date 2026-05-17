@@ -182,6 +182,21 @@ export function traitementFichier1(rows = []) {
     }))
 }
 
+export function traitementFichier2(rows = []) {
+  const normalizedRows = Array.isArray(rows) ? rows : []
+  return normalizedRows
+    .filter((row) => !isEmptyRow(row))
+    .map((row, index) => ({
+      ligne: index + 1,
+      reference: normalizeText(row.reference),
+      specificite: normalizeText(row.specificite || row['specificité'] || row['Specificité'] || row['Specificite']),
+      karazany: normalizeText(row.karazany || row['Karazany']),
+      stock_initial: parseLocalizedNumber(row.stock_initial || row['stock_initial'] || row['stock'] || row['Stock']),
+      prix_vente_ttc: parseLocalizedNumber(row.prix_vente_ttc || row['prix_vente_ttc'] || row['prix'] || row['Prix'])
+    }))
+}
+
 export default {
-  traitementFichier1
+  traitementFichier1,
+  traitementFichier2
 }

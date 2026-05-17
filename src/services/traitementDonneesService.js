@@ -403,10 +403,188 @@ export async function uploadProductImages(zipFile, planFinal) {
   return planFinal
 }
 
+/**
+ * executeFichier2Import(rowsFichier2, planFinal)
+ * Gère l'importation du deuxième fichier contenant les déclinaisons (combinaisons)
+ * et les stocks associés, ou le stock initial direct pour les produits simples.
+ */
+export async function executeFichier2Import(rowsFichier2, planFinal) {
+  const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+  const createdOptions = {} // nom -> id
+  const createdOptionValues = {} // optionId_valeur -> id
+  const hasDefaultCombination = {} // productId -> boolean
+
+  const results = {
+    simpleProductsUpdated: 0,
+    combinationsCreated: 0,
+    errors: []
+  }
+
+  for (const row of rowsFichier2) {
+    // 1. Trouver le produit correspondant
+    const product = planFinal.createdProducts.find(
+      (p) => String(p.reference).toLowerCase().trim() === String(row.reference).toLowerCase().trim()
+    )
+
+    if (!product || !product.id_product_prestashop) {
+      console.warn(`[Import Fichier 2] Produit introuvable pour la référence : ${row.reference}`)
+      results.errors.push(`Produit introuvable pour la référence : ${row.reference}`)
+      continue
+    }
+
+    const productId = product.id_product_prestashop
+
+    // 2. Si pas de spécificité (produit simple)
+    if (!row.specificite || !row.karazany) {
+      if (row.stock_initial !== null && row.stock_initial !== undefined) {
+        console.log(`[Import Fichier 2] Mise à jour du stock simple pour ${row.reference} (Quantité: ${row.stock_initial})`)
+        const stockSuccess = await updateStockInPrestashop(productId, 0, row.stock_initial)
+        if (stockSuccess) {
+          results.simpleProductsUpdated++
+        } else {
+          results.errors.push(`Erreur mise à jour stock simple pour ${row.reference}`)
+        }
+      }
+      continue
+    }
+
+    // 3. Produit avec déclinaison
+    try {
+      // 3a. Gérer le groupe d'options (product_options)
+      const optionName = row.specificite.trim()
+      let optionId = createdOptions[optionName.toLowerCase()]
+
+      if (!optionId) {
+        console.log(`[Import Fichier 2] Création de l'attribut (product_option) : ${optionName}`)
+        const optionXml = jsonToXml({
+          name: { language: { '@_id': '1', '#text': optionName } },
+          public_name: { language: { '@_id': '1', '#text': optionName } },
+          group_type: 'select',
+          is_color_group: optionName.toLowerCase() === 'couleur' ? 1 : 0
+        }, 'product_option')
+
+        const resOpt = await fetch(`${API_URL}/product_options`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/xml', ...authHeader },
+          body: optionXml
+        })
+
+        if (resOpt.ok) {
+          const textOpt = await resOpt.text()
+          const jsonOpt = await xmlToJson(textOpt)
+          optionId = jsonOpt?.prestashop?.product_option?.id
+          if (optionId) {
+            createdOptions[optionName.toLowerCase()] = optionId
+          }
+        } else {
+          console.error(`Erreur création option ${optionName}`, await resOpt.text())
+          results.errors.push(`Erreur création attribut ${optionName}`)
+          continue
+        }
+      }
+
+      // 3b. Gérer la valeur de l'option (product_option_values)
+      const valueName = row.karazany.trim()
+      const valueKey = `${optionId}_${valueName.toLowerCase()}`
+      let valueId = createdOptionValues[valueKey]
+
+      if (!valueId) {
+        console.log(`[Import Fichier 2] Création de la valeur : ${valueName} pour l'attribut ID ${optionId}`)
+        const valueXml = jsonToXml({
+          id_attribute_group: optionId,
+          name: { language: { '@_id': '1', '#text': valueName } }
+        }, 'product_option_value')
+
+        const resVal = await fetch(`${API_URL}/product_option_values`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/xml', ...authHeader },
+          body: valueXml
+        })
+
+        if (resVal.ok) {
+          const textVal = await resVal.text()
+          const jsonVal = await xmlToJson(textVal)
+          valueId = jsonVal?.prestashop?.product_option_value?.id
+          if (valueId) {
+            createdOptionValues[valueKey] = valueId
+          }
+        } else {
+          console.error(`Erreur création valeur ${valueName}`, await resVal.text())
+          results.errors.push(`Erreur création valeur ${valueName} pour ${optionName}`)
+          continue
+        }
+      }
+
+      // 3c. Créer la déclinaison (combination)
+      const taxRate = toNumber(product.taxe) || 0
+      const combPriceTtc = toNumber(row.prix_vente_ttc) || 0
+      const combPriceHt = round2(combPriceTtc / (1 + taxRate / 100))
+      
+      const basePriceHt = toNumber(product.price_ht) || 0
+      const priceImpactHt = round2(combPriceHt - basePriceHt)
+
+      const isFirstComb = !hasDefaultCombination[productId]
+      if (isFirstComb) {
+        hasDefaultCombination[productId] = true
+      }
+
+      const combinationXml = jsonToXml({
+        id_product: productId,
+        reference: `${product.reference}-${valueName}`,
+        price: priceImpactHt,
+        minimal_quantity: 1,
+        default_on: isFirstComb ? 1 : 0,
+        associations: {
+          product_option_values: {
+            product_option_value: { id: valueId }
+          }
+        }
+      }, 'combination')
+
+      console.log(`[Import Fichier 2] Création de la déclinaison ${product.reference} - ${valueName} (Impact prix HT: ${priceImpactHt})`)
+      const resComb = await fetch(`${API_URL}/combinations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: combinationXml
+      })
+
+      if (resComb.ok) {
+        const textComb = await resComb.text()
+        const jsonComb = await xmlToJson(textComb)
+        const combinationId = jsonComb?.prestashop?.combination?.id
+
+        if (combinationId) {
+          results.combinationsCreated++
+          console.log(`[Import Fichier 2] Déclinaison créée avec succès (ID: ${combinationId})`)
+
+          // 3d. Initialisation du stock de la déclinaison
+          if (row.stock_initial !== null && row.stock_initial !== undefined) {
+            console.log(`[Import Fichier 2] Initialisation du stock pour la combinaison ID ${combinationId} (Quantité: ${row.stock_initial})...`)
+            const stockSuccess = await updateStockInPrestashop(productId, combinationId, row.stock_initial)
+            if (!stockSuccess) {
+              console.error(`[Import Fichier 2] Échec de l'initialisation du stock pour la combinaison ID ${combinationId}`)
+              results.errors.push(`Erreur stock déclinaison ${product.reference}-${valueName}`)
+            }
+          }
+        }
+      } else {
+        console.error(`Erreur création combinaison ${product.reference}-${valueName}`, await resComb.text())
+        results.errors.push(`Erreur création déclinaison ${product.reference}-${valueName}`)
+      }
+    } catch (err) {
+      console.error(`Exception déclinaison ${product.reference}-${row.karazany}`, err)
+      results.errors.push(`Exception déclinaison ${product.reference}-${row.karazany}`)
+    }
+  }
+
+  return results
+}
+
 export default {
   buildFichier1ImportPlan,
   logFichier1ImportPlan,
   executeImportPlan,
   insertProducts,
-  uploadProductImages
+  uploadProductImages,
+  executeFichier2Import
 }
