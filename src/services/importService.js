@@ -1,6 +1,17 @@
 import { useFileValidator } from './useFileValidator'
 import Papa from 'papaparse'
 
+/*
+ * importService.js
+ * - Valide la présence et le type des fichiers (3 CSV + ZIP) via `useFileValidator`
+ * - Parse les CSV avec PapaParse (header: true)
+ *
+ * Fonctions principales exposées:
+ *  - validateImportFiles({ csvFiles, zipFile }) -> { valid, errors, files }
+ *  - parseCsvFile(file) -> Promise<rows>
+ *  - parseCsvFiles(files) -> Promise< [{fileName, rows}] >
+ */
+
 const { validateFiles } = useFileValidator()
 
 function normalizeFileList(files) {
@@ -9,6 +20,7 @@ function normalizeFileList(files) {
   return Array.from(files).filter(Boolean)
 }
 
+// Valide la présence des 3 CSV et du ZIP, puis délègue la vérification binaire
 export async function validateImportFiles({ csvFiles = [], zipFile = null } = {}) {
   const normalizedCsvFiles = normalizeFileList(csvFiles)
   const errors = []
@@ -41,6 +53,7 @@ export async function validateImportFiles({ csvFiles = [], zipFile = null } = {}
   }
 }
 
+// Parse un CSV via PapaParse et renvoie les lignes en en-têtes -> valeurs
 export function parseCsvFile(file, papaOptions = {}) {
   return new Promise((resolve, reject) => {
     if (!file) {
@@ -68,6 +81,7 @@ export function parseCsvFile(file, papaOptions = {}) {
   })
 }
 
+// Parse une liste de fichiers CSV en parallèle
 export async function parseCsvFiles(csvFiles = []) {
   const normalizedCsvFiles = normalizeFileList(csvFiles)
   const parsedFiles = await Promise.all(
@@ -80,6 +94,7 @@ export async function parseCsvFiles(csvFiles = []) {
   return parsedFiles
 }
 
+// Résumé utile pour l'UI
 export function getImportFileSummary({ csvFiles = [], zipFile = null } = {}) {
   const normalizedCsvFiles = normalizeFileList(csvFiles)
   return {

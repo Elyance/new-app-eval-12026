@@ -204,6 +204,11 @@
 </template>
 
 <script>
+// Vue component: Liste des produits (BackOffice)
+// Comportement principal:
+// - charge les produits via `getProducts()`
+// - ouvre un modal pour ajouter du stock (récupère le détail produit à la demande)
+// - utilise `updateStockInPrestashop` pour appliquer les changements côté PrestaShop
 import { getProducts, getProductDetail } from '../../../services/productService'
 import {
   updateStockInPrestashop
@@ -274,6 +279,7 @@ export default {
       if (quantity < 10) return 'text-bg-warning'
       return 'text-bg-info'
     },
+    // Ouvre le modal d'ajout de stock et récupère le détail (combinations, options)
     openAddStock(product) {
       this.selectedProduct = { ...product }
       this.selectedCombinationId = null
@@ -292,6 +298,7 @@ export default {
           // ensure quantity present
           this.selectedProduct.quantity = Number(this.selectedProduct.quantity ?? detail.inStock ?? 0)
         } catch (err) {
+          // Erreurs réseau / API ne bloquent pas l'ouverture du modal
           console.error('Impossible de récupérer le détail produit pour le modal:', err)
         }
       })()
@@ -304,6 +311,9 @@ export default {
       this.savingStock = false
       this.modalError = null
     },
+    // Valide et soumet la mise à jour de stock
+    // - recherche la combinaison correspondante si options sélectionnées
+    // - appelle `updateStockInPrestashop` pour appliquer la modification
     async confirmAddStock() {
       const add = Number(this.stockToAdd) || 0
       const hasCombinations = Array.isArray(this.selectedProduct?.combinations) && this.selectedProduct.combinations.length > 0
@@ -343,9 +353,9 @@ export default {
 
       try {
         const success = await updateStockInPrestashop(this.selectedProduct.id, selectedCombination?.id || 0, add)
-        
+
         if (success) {
-          // locally update view
+          // Mise à jour locale de l'UI pour refléter le changement immédiatement
           if (selectedCombination) {
             selectedCombination.inStock = (selectedCombination.inStock || 0) + add
           }
@@ -366,6 +376,7 @@ export default {
           this.savingStock = false
         }
       } catch (err) {
+        // Gérer les erreurs réseau / API proprement
         console.error('Erreur API lors de la mise à jour du stock :', err)
         this.modalError = "Erreur de communication avec l'API."
         this.savingStock = false

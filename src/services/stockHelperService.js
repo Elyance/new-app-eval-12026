@@ -1,6 +1,17 @@
 import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 
+/*
+ * stockHelperService.js
+ * Helper utilities for stock operations:
+ * - computeMatchingCombination: given product + selected options, find the matching combination
+ * - payload builders: prepare objects to be converted into XML for PrestaShop
+ * - updateStockInPrestashop: example implementation to POST stock_movement and PUT stock_available
+ *
+ * Ces fonctions sont utilisées depuis la vue BO pour simuler ou effectuer la mise à jour de stock.
+ */
+
+// Retourne la combinaison correspondant aux options sélectionnées si trouvée.
 export function computeMatchingCombination(product, selectedOptions, selectedCombinationId) {
   const selectedOptionValueIds = Object.values(selectedOptions || {}).map(v => Number(v)).filter(Number.isFinite)
 
@@ -12,6 +23,7 @@ export function computeMatchingCombination(product, selectedOptions, selectedCom
     if (matching) return matching
   }
 
+  // Si l'utilisateur a choisi explicitement une combinaison, la retrouver
   if (selectedCombinationId) {
     return (product.combinations || []).find(c => Number(c.id) === Number(selectedCombinationId)) || null
   }
@@ -19,6 +31,7 @@ export function computeMatchingCombination(product, selectedOptions, selectedCom
   return null
 }
 
+// Builders pour payloads JSON (avant conversion XML)
 export function buildStockMovementPayload({ productId, combinationId = 0, quantity, note = '' }) {
   const dateNow = new Date().toISOString().slice(0, 19).replace('T', ' ')
   return {
@@ -46,6 +59,14 @@ export function generateStockAvailableXml(payload) {
   return jsonToXml(payload, 'stock_available')
 }
 
+/*
+ * updateStockInPrestashop
+ * Exemple de processus :
+ * 1) Récupérer le `stock_available` existant pour le produit (+ combinaison)
+ * 2) Poster un `stock_movement` (historique)
+ * 3) Mettre à jour le `stock_available` (PUT)
+ * Retourne true si succès, false sinon.
+ */
 export async function updateStockInPrestashop(productId, combinationId = 0, deltaQuantity) {
   try {
     const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }

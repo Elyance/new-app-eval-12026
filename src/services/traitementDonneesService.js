@@ -1,5 +1,20 @@
 import { normalizeText, slugify, toNumber, round2 } from '../utils/importFormatters'
+import { jsonToXml, xmlToJson } from '../utils/xmlParser'
+import { API_URL, API_KEY } from '../constants/constant'
 
+
+/*
+ * traitementDonneesService.js
+ * Regroupe et prépare les entités (catégories, taxes, produits) à partir
+ * des lignes normalisées (format attendu par traitementCSVService.traitementFichier1).
+ *
+ * Usage principal:
+ *  - appeler `buildFichier1ImportPlan(rows)` avec les lignes déjà normalisées
+ *    pour obtenir un plan d'import (catégories, taxes, produits) sans doublons.
+ *  - `logFichier1ImportPlan(plan)` pour afficher un résumé en console.
+ */
+
+// Calcule le prix HT à partir d'un prix TTC et d'un taux de taxe (en %)
 function buildProductPriceHt(priceTtc, taxRate) {
   const ttc = toNumber(priceTtc)
   const taxe = toNumber(taxRate) || 0
@@ -10,6 +25,7 @@ function buildProductPriceHt(priceTtc, taxRate) {
   return round2(ttc / (1 + taxe / 100))
 }
 
+// Transforme une ligne normalisée en objets entités (category, tax, product)
 function splitRowFile1(row) {
   const categoryName = normalizeText(row.categorie)
   const taxRate = toNumber(row.taxe)
@@ -22,6 +38,7 @@ function splitRowFile1(row) {
       slug: slugify(categoryName)
     },
     tax: {
+      // Nom utilisé pour affichage (ex: "20%")
       name: taxRate === null ? '' : `${taxRate}%`,
       rate: taxRate
     },
@@ -38,9 +55,16 @@ function splitRowFile1(row) {
   }
 }
 
+/**
+ * buildFichier1ImportPlan(rows)
+ * - rows: tableau de lignes déjà normalisées (output de traitementCSVService.traitementFichier1)
+ * Retourne un objet { categories, taxes, products, rows } prêt à être transformé
+ * en requêtes vers PrestaShop. Les doublons sont filtrés par clé (slug / taux).
+ */
 export function buildFichier1ImportPlan(rows = []) {
   const normalizedRows = Array.isArray(rows) ? rows : []
 
+  // On filtre les lignes vides et on enrichit chaque ligne avec ses entités
   const rowsWithEntities = normalizedRows
     .filter((row) => Object.values(row || {}).some((value) => normalizeText(value) !== ''))
     .map((row, index) => ({
@@ -55,6 +79,7 @@ export function buildFichier1ImportPlan(rows = []) {
   const categoryMap = new Map()
   const taxMap = new Map()
 
+  // Construire listes uniques: catégories, taxes, produits
   for (const row of rowsWithEntities) {
     const categoryKey = row.category.slug || row.category.name || `categorie-${row.ligne}`
     if (row.category.name && !categoryMap.has(categoryKey)) {
@@ -76,6 +101,7 @@ export function buildFichier1ImportPlan(rows = []) {
       taxes.push(taxEntry)
     }
 
+    // Produit: on garde une clé basée sur la référence si disponible
     products.push({
       key: row.product.reference || `produit-${row.ligne}`,
       ...row.product,
@@ -92,13 +118,212 @@ export function buildFichier1ImportPlan(rows = []) {
   }
 }
 
+// Affiche un résumé du plan d'importation pour debug
 export function logFichier1ImportPlan(plan) {
   console.log('[traitementDonneesService] Plan catégories:', plan.categories)
   console.log('[traitementDonneesService] Plan taxes:', plan.taxes)
   console.log('[traitementDonneesService] Plan produits:', plan.products)
 }
 
+/**
+ * executeImportPlan(plan)
+ * Exécute la création des catégories et des taxes via l'API PrestaShop,
+ * puis enrichit le plan des produits avec les identifiants créés.
+ */
+export async function executeImportPlan(plan) {
+  const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+  
+  // 1. Création des Catégories
+  const createdCategories = {}
+  for (const cat of plan.categories) {
+    if (!cat.name) continue
+    
+    const catXml = jsonToXml({
+      active: 1,
+      id_parent: 2, // 2 = Catégorie Accueil (Home) par défaut
+      name: { language: { '@_id': '1', '#text': cat.name } },
+      link_rewrite: { language: { '@_id': '1', '#text': cat.slug } }
+    }, 'category')
+    
+    try {
+      const res = await fetch(`${API_URL}/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: catXml
+      })
+      if (res.ok) {
+        const text = await res.text()
+        const json = await xmlToJson(text)
+        const newId = json?.prestashop?.category?.id
+        if (newId) {
+          createdCategories[cat.key] = newId
+          console.log(`Catégorie "${cat.name}" créée (ID: ${newId})`)
+        }
+      } else {
+        console.error(`Erreur création catégorie ${cat.name}`, await res.text())
+      }
+    } catch (err) {
+      console.error(`Exception création catégorie ${cat.name}`, err)
+    }
+  }
+
+  // 2. Création des Taxes et Groupes de Règles de Taxes
+  const createdTaxesRules = {}
+  for (const tax of plan.taxes) {
+    if (tax.rate === null || tax.rate === undefined) continue
+
+    try {
+      // 2a. Créer la Taxe
+      const taxXml = jsonToXml({
+        rate: tax.rate,
+        active: 1,
+        name: { language: { '@_id': '1', '#text': `TVA ${tax.rate}%` } }
+      }, 'tax')
+      
+      const taxRes = await fetch(`${API_URL}/taxes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: taxXml
+      })
+      if (!taxRes.ok) {
+         console.error(`Erreur création taxe ${tax.rate}%`, await taxRes.text())
+         continue
+      }
+      const taxText = await taxRes.text()
+      const taxJson = await xmlToJson(taxText)
+      const idTax = taxJson?.prestashop?.tax?.id
+
+      // 2b. Créer le Groupe de Règle de Taxe
+      const taxGroupXml = jsonToXml({
+        name: `Règle TVA ${tax.rate}%`,
+        active: 1
+      }, 'tax_rule_group')
+
+      const groupRes = await fetch(`${API_URL}/tax_rule_groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: taxGroupXml
+      })
+      if (!groupRes.ok) {
+         console.error(`Erreur création tax_rule_group ${tax.rate}%`, await groupRes.text())
+         continue
+      }
+      const groupText = await groupRes.text()
+      const groupJson = await xmlToJson(groupText)
+      const idTaxRulesGroup = groupJson?.prestashop?.tax_rule_group?.id
+
+      // 2c. Lier la taxe au groupe via une Règle de Taxe (tax_rule)
+      const taxRuleXml = jsonToXml({
+        id_tax_rules_group: idTaxRulesGroup,
+        id_tax: idTax,
+        id_country: 8, // 8 = France par défaut (modifiez selon besoin)
+        behavior: 0 // 0 = Cette taxe uniquement
+      }, 'tax_rule')
+
+      const ruleRes = await fetch(`${API_URL}/tax_rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: taxRuleXml
+      })
+
+      if (ruleRes.ok) {
+        createdTaxesRules[tax.key] = idTaxRulesGroup
+        console.log(`Groupe de règles de taxe ${tax.rate}% créé avec succès (ID: ${idTaxRulesGroup})`)
+      } else {
+        console.error(`Erreur création tax_rule ${tax.rate}%`, await ruleRes.text())
+      }
+    } catch (err) {
+      console.error(`Exception création taxe ${tax.rate}%`, err)
+    }
+  }
+
+  // 3. Enrichir les produits avec les IDs récupérés
+  for (const product of plan.products) {
+    if (product.category_key && createdCategories[product.category_key]) {
+      product.id_category_default = createdCategories[product.category_key]
+    }
+    if (product.tax_key && createdTaxesRules[product.tax_key]) {
+      product.id_tax_rules_group = createdTaxesRules[product.tax_key]
+    }
+  }
+
+  return {
+    ...plan,
+    createdCategories,
+    createdTaxesRules
+  }
+}
+
+/**
+ * insertProducts(plan)
+ * Exécute la création des produits via l'API PrestaShop en utilisant le plan
+ * enrichi (contenant id_category_default et id_tax_rules_group).
+ */
+export async function insertProducts(plan) {
+  const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+  const createdProducts = []
+
+  for (const product of plan.products) {
+    if (!product.name) continue
+
+    const id_category_default = product.id_category_default || 2 // Catégorie Accueil par défaut
+    const id_tax_rules_group = product.id_tax_rules_group || 0
+
+    const productXml = jsonToXml({
+      id_category_default: id_category_default,
+      id_tax_rules_group: id_tax_rules_group,
+      price: product.price_ht || 0,
+      wholesale_price: product.prix_achat || 0,
+      active: 1,
+      state: 1,
+      available_for_order: 1,
+      show_price: 1,
+      reference: product.reference || '',
+      name: { language: { '@_id': '1', '#text': product.name } },
+      link_rewrite: { language: { '@_id': '1', '#text': slugify(product.name) } },
+      associations: {
+        categories: {
+          category: { id: id_category_default }
+        }
+      }
+    }, 'product')
+
+    try {
+      const res = await fetch(`${API_URL}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml', ...authHeader },
+        body: productXml
+      })
+
+      if (res.ok) {
+        const text = await res.text()
+        const json = await xmlToJson(text)
+        const newId = json?.prestashop?.product?.id
+        
+        if (newId) {
+          createdProducts.push({
+            ...product,
+            id_product_prestashop: newId
+          })
+          console.log(`Produit "${product.name}" créé avec succès (ID: ${newId})`)
+        }
+      } else {
+        console.error(`Erreur création produit "${product.name}" :`, await res.text())
+      }
+    } catch (err) {
+      console.error(`Exception lors de la création du produit "${product.name}" :`, err)
+    }
+  }
+
+  return {
+    ...plan,
+    createdProducts
+  }
+}
+
 export default {
   buildFichier1ImportPlan,
-  logFichier1ImportPlan
+  logFichier1ImportPlan,
+  executeImportPlan,
+  insertProducts
 }

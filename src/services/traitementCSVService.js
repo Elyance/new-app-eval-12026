@@ -1,5 +1,14 @@
 import { normalizeText } from '../utils/importFormatters'
 
+/*
+ * traitementCSVService.js
+ * Fonctions utilitaires pour parser / normaliser les valeurs issues des CSV
+ * - gestion flexible des formats de date (ISO, DMY, MDY, mois textuels en FR/EN...)
+ * - conversion des nombres localisés (ex: "1 234,56" -> 1234.56)
+ * - nettoyage des champs texte
+ */
+
+// Liste d'alias de mois pour reconnaître des mois textuels en différentes langues
 const MONTH_ALIASES = {
   1: ['janvier', 'january', 'jan', 'januari'],
   2: ['février', 'fevrier', 'february', 'feb', 'februari'],
@@ -22,6 +31,7 @@ const MONTH_LOOKUP = Object.entries(MONTH_ALIASES).reduce((acc, [num, aliases]) 
   return acc
 }, {})
 
+// Normalise un token de mois pour une comparaison robuste (sans accents, minuscule)
 function normalizeMonthToken(value) {
   return String(value ?? '')
     .normalize('NFD')
@@ -31,6 +41,8 @@ function normalizeMonthToken(value) {
     .trim()
 }
 
+// Convertit une chaîne contenant un nombre localisé en Number
+// Exemples: "1 234,56" -> 1234.56 ; "1.234.56" -> null (invalid)
 function parseLocalizedNumber(value) {
   const normalized = normalizeText(value)
     .replace(/\s+/g, '')
@@ -43,10 +55,12 @@ function parseLocalizedNumber(value) {
 
   let cleaned = normalized
   if (lastComma > -1 && lastDot > -1) {
+    // les deux séparateurs présents : on décide selon la position du dernier
     cleaned = lastComma > lastDot
       ? normalized.replace(/\./g, '').replace(',', '.')
       : normalized.replace(/,/g, '')
   } else if (lastComma > -1) {
+    // format francophone: 1234,56
     cleaned = normalized.replace(',', '.')
   }
 
@@ -54,6 +68,7 @@ function parseLocalizedNumber(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+// Convertit des composantes jour/mois/année en chaîne ISO (YYYY-MM-DD) si valide
 function toIsoDate(year, month, day) {
   const isoDate = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   const date = new Date(`${isoDate}T00:00:00`)
@@ -66,6 +81,7 @@ function toIsoDate(year, month, day) {
   return isoDate
 }
 
+// Rend la date au format d'affichage attendu par l'app: DD/MM/YYYY
 function toDisplayDate(year, month, day) {
   return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${String(year).padStart(4, '0')}`
 }
@@ -85,6 +101,7 @@ function parseAnyDate(value) {
 
   console.log('[traitementCSVService] Traitement date - entrée:', normalized, '| nettoyée:', cleaned)
 
+  // On ne garde que la première partie (avant le time si présent)
   const dateOnly = cleaned.split(' ')[0].split('T')[0]
 
   const isoMatch = dateOnly.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/)
@@ -138,6 +155,7 @@ function parseAnyDate(value) {
   return displayDate
 }
 
+// Parse une valeur de pourcentage et retourne un nombre (ex: '20%' -> 20)
 function normalizePercentage(value) {
   return parseLocalizedNumber(String(value ?? '').replace('%', ''))
 }
@@ -148,7 +166,7 @@ function isEmptyRow(row) {
 
 export function traitementFichier1(rows = []) {
   const normalizedRows = Array.isArray(rows) ? rows : []
-
+  // Filtre les lignes vides puis normalise chaque champ important
   return normalizedRows
     .filter((row) => !isEmptyRow(row))
     .map((row, index) => ({

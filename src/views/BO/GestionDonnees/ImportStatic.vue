@@ -40,9 +40,17 @@
 </template>
 
 <script>
+// Page d'import statique utilisée pour tester le pipeline CSV -> normalisation -> plan d'import
+// Étapes documentées:
+// 1) validateImportFiles : vérifie présence/format des fichiers (3 CSV + ZIP)
+// 2) parseCsvFiles : parse les CSV avec PapaParse
+// 3) traitementFichier1 : normalise les lignes (dates, nombres, etc.)
+// 4) buildFichier1ImportPlan : prépare le plan d'import pour PrestaShop
+// 5) executeImportPlan : crée les catégories et les taxes via l'API
+// 6) insertProducts : insère les produits via l'API
 import { validateImportFiles, getImportFileSummary, parseCsvFiles } from '../../../services/importService'
 import { traitementFichier1 } from '../../../services/traitementCSVService'
-import { buildFichier1ImportPlan, logFichier1ImportPlan } from '../../../services/traitementDonneesService'
+import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts } from '../../../services/traitementDonneesService'
 
 export default {
   name: 'ImportStatic',
@@ -58,12 +66,12 @@ export default {
     async handleSubmit() {
       const csvFiles = [this.$refs.f1?.files?.[0], this.$refs.f2?.files?.[0], this.$refs.f3?.files?.[0]].filter(Boolean)
       const zipFile = this.$refs.images?.files?.[0] || null
-
       console.log('[ImportStatic] Soumission reçue', {
         csvNames: csvFiles.map(file => file?.name || ''),
         zipName: zipFile?.name || ''
       })
 
+      // 1) Validation basique des fichiers
       const validation = await validateImportFiles({ csvFiles, zipFile })
       console.log('[ImportStatic] Résultat validation', validation)
       this.validationErrors = validation.errors
@@ -74,30 +82,40 @@ export default {
         return
       }
 
+      // 2) Parsing des CSV
       this.isSubmitting = true
       try {
         console.log('[ImportStatic] Début du parsing CSV')
         const parsedCsvFiles = await parseCsvFiles(validation.files.csvFiles)
         console.log('[ImportStatic] Parsing CSV terminé', parsedCsvFiles)
 
+        // 3) On traite le premier CSV (format attendu par traitementFichier1)
         const fichier1 = parsedCsvFiles[0]
         if (fichier1) {
           console.log('[ImportStatic] CSV 1 brut', fichier1.rows)
           const fichier1Traite = traitementFichier1(fichier1.rows)
           console.log('[ImportStatic] CSV 1 traité', fichier1Traite)
 
+          // 4) Préparer un plan d'import (catégories/taxes/produits)
           const planImportFichier1 = buildFichier1ImportPlan(fichier1Traite)
           console.log('[ImportStatic] Plan d’import fichier 1', planImportFichier1)
           logFichier1ImportPlan(planImportFichier1)
+
+          // 5) Exécuter la création des entités parentes (Catégories et Taxes)
+          console.log('[ImportStatic] Création des Catégories et Taxes via l\'API...')
+          const planEnrichi = await executeImportPlan(planImportFichier1)
+
+          // 6) Insérer les produits avec les bons IDs
+          console.log('[ImportStatic] Insertion des Produits via l\'API...')
+          const planFinal = await insertProducts(planEnrichi)
+          console.log('[ImportStatic] Import terminé avec succès !', planFinal)
         }
 
         const summary = getImportFileSummary(validation.files)
 
-        setTimeout(() => {
-          this.isSubmitting = false
-          this.success = true
-          this.message = `Fichiers validés: ${summary.csvNames.join(', ')} | ZIP: ${summary.zipName}`
-        }, 700)
+        this.isSubmitting = false
+        this.success = true
+        this.message = `Importation terminée ! Fichiers traités : ${summary.csvNames.join(', ')}`
       } catch (error) {
         console.error('[ImportStatic] Erreur pendant le parsing CSV', error)
         this.isSubmitting = false
