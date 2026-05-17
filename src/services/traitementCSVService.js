@@ -3,43 +3,11 @@ import { normalizeText } from '../utils/importFormatters'
 /*
  * traitementCSVService.js
  * Fonctions utilitaires pour parser / normaliser les valeurs issues des CSV
- * - gestion flexible des formats de date (ISO, DMY, MDY, mois textuels en FR/EN...)
+ * - validation stricte du format de date DD/MM/YYYY avec levée d'exception
+ * - validation des montants strictement positifs (> 0)
  * - conversion des nombres localisés (ex: "1 234,56" -> 1234.56)
  * - nettoyage des champs texte
  */
-
-// Liste d'alias de mois pour reconnaître des mois textuels en différentes langues
-const MONTH_ALIASES = {
-  1: ['janvier', 'january', 'jan', 'januari'],
-  2: ['février', 'fevrier', 'february', 'feb', 'februari'],
-  3: ['mars', 'march', 'mar', 'maart'],
-  4: ['avril', 'april', 'apr'],
-  5: ['mai', 'may', 'mei'],
-  6: ['juin', 'june', 'jun', 'juni'],
-  7: ['juillet', 'july', 'jul', 'juli'],
-  8: ['août', 'aout', 'august', 'aug', 'augustus'],
-  9: ['septembre', 'september', 'sep', 'sept'],
-  10: ['octobre', 'october', 'oct'],
-  11: ['novembre', 'november', 'nov'],
-  12: ['décembre', 'decembre', 'december', 'dec']
-}
-
-const MONTH_LOOKUP = Object.entries(MONTH_ALIASES).reduce((acc, [num, aliases]) => {
-  aliases.forEach((alias) => {
-    acc[normalizeMonthToken(alias)] = parseInt(num, 10)
-  })
-  return acc
-}, {})
-
-// Normalise un token de mois pour une comparaison robuste (sans accents, minuscule)
-function normalizeMonthToken(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\.$/, '')
-    .trim()
-}
 
 // Convertit une chaîne contenant un nombre localisé en Number
 // Exemples: "1 234,56" -> 1234.56 ; "1.234.56" -> null (invalid)
@@ -68,91 +36,96 @@ function parseLocalizedNumber(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-// Convertit des composantes jour/mois/année en chaîne ISO (YYYY-MM-DD) si valide
-function toIsoDate(year, month, day) {
-  const isoDate = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  const date = new Date(`${isoDate}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) return null
-  if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() + 1 !== Number(month) || date.getUTCDate() !== Number(day)) {
-    return null
+// Valide et formate une date strictement au format DD/MM/YYYY
+function validateAndFormatDisplayDate(value, fieldName = 'date', lineNum) {
+  const str = String(value ?? '').trim()
+  if (!str) {
+    throw new Error(`Ligne ${lineNum} : Le champ '${fieldName}' est obligatoire et ne peut pas être vide.`)
   }
 
-  return isoDate
+  // Format exact DD/MM/YYYY
+  const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!match) {
+    throw new Error(`Ligne ${lineNum} : Le format de la date '${str}' pour le champ '${fieldName}' est incorrect. Format attendu : DD/MM/YYYY.`)
+  }
+
+  const [, dayStr, monthStr, yearStr] = match
+  const day = parseInt(dayStr, 10)
+  const month = parseInt(monthStr, 10)
+  const year = parseInt(yearStr, 10)
+
+  // Validation calendrier standard
+  if (month < 1 || month > 12) {
+    throw new Error(`Ligne ${lineNum} : Le mois '${monthStr}' de la date '${str}' est invalide (doit être entre 01 et 12).`)
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  if (day < 1 || day > daysInMonth) {
+    throw new Error(`Ligne ${lineNum} : Le jour '${dayStr}' de la date '${str}' est invalide pour ce mois (maximum ${daysInMonth} jours).`)
+  }
+
+  return str
 }
 
-// Rend la date au format d'affichage attendu par l'app: DD/MM/YYYY
-function toDisplayDate(year, month, day) {
-  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${String(year).padStart(4, '0')}`
+// Valide qu'un montant est strictement supérieur à 0
+function validatePositivePrice(value, fieldName, lineNum) {
+  const parsed = parseLocalizedNumber(value)
+  if (parsed === null) {
+    throw new Error(`Ligne ${lineNum} : Le montant '${fieldName}' est invalide ou manquant (reçu: '${value}').`)
+  }
+  if (parsed <= 0) {
+    throw new Error(`Ligne ${lineNum} : Le montant '${fieldName}' doit être strictement positif (trouvé: ${parsed}).`)
+  }
+  return parsed
 }
 
-function parseAnyDate(value) {
-  const normalized = normalizeText(value)
-  if (!normalized) {
-    console.log('[traitementCSVService] Date vide ou absente:', value)
-    return null
+// Définition des colonnes attendues pour chaque fichier CSV
+export const COLUMNS_FICHIER1 = [
+  'date_availability_produit',
+  'nom',
+  'reference',
+  'prix_ttc',
+  'Taxe',
+  'categorie',
+  'prix_achat'
+]
+
+export const COLUMNS_FICHIER2 = [
+  'reference',
+  'specificité',
+  'karazany',
+  'stock_initial',
+  'prix_vente_ttc'
+]
+
+export const COLUMNS_FICHIER3 = [
+  'date',
+  'nom',
+  'email',
+  'pwd',
+  'adresse',
+  'achat',
+  'etat'
+]
+
+// Vérifie que les en-têtes du CSV correspondent exactement en noms et en quantité
+function validateCsvHeaders(rows, expectedHeaders, fileLabel) {
+  const filtered = Array.isArray(rows) ? rows.filter(r => !isEmptyRow(r)) : []
+  if (filtered.length === 0) return
+
+  const actualHeaders = Object.keys(filtered[0])
+
+  // 1. Vérification du nombre de colonnes
+  if (actualHeaders.length !== expectedHeaders.length) {
+    throw new Error(`${fileLabel} invalide : le nombre de colonnes ne correspond pas. Attendu : ${expectedHeaders.length} (colonnes : [${expectedHeaders.join(', ')}]), reçu : ${actualHeaders.length} (colonnes : [${actualHeaders.join(', ')}]).`)
   }
 
-  const cleaned = normalized
-    .replace(/\bat\b/gi, ' ')
-    .replace(/\bà\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  console.log('[traitementCSVService] Traitement date - entrée:', normalized, '| nettoyée:', cleaned)
-
-  // On ne garde que la première partie (avant le time si présent)
-  const dateOnly = cleaned.split(' ')[0].split('T')[0]
-
-  const isoMatch = dateOnly.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/)
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch
-    const displayDate = toDisplayDate(year, month, day)
-    console.log('[traitementCSVService] Date ISO détectée ->', displayDate)
-    return displayDate
-  }
-
-  const dmyMatch = dateOnly.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
-  if (dmyMatch) {
-    const [, day, month, year] = dmyMatch
-    const displayDate = toDisplayDate(year, month, day)
-    console.log('[traitementCSVService] Date DMY détectée ->', displayDate)
-    return displayDate
-  }
-
-  const mdyMatch = dateOnly.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
-  if (mdyMatch) {
-    const [, month, day, yearRaw] = mdyMatch
-    const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw
-    const displayDate = toDisplayDate(year, month, day)
-    console.log('[traitementCSVService] Date MDY détectée ->', displayDate)
-    return displayDate
-  }
-
-  const textMonthMatch = cleaned.match(/^(\d{1,2})\s+([\p{L}.]+)\s+(\d{4})(?:\s+.*)?$/u)
-  if (textMonthMatch) {
-    const [, day, monthLabel, year] = textMonthMatch
-    const month = MONTH_LOOKUP[normalizeMonthToken(monthLabel)]
-    if (month) {
-      const displayDate = toDisplayDate(year, month, day)
-      console.log('[traitementCSVService] Date textuelle détectée ->', displayDate)
-      return displayDate
+  // 2. Vérification de l'orthographe exacte et présence de chaque colonne
+  for (const expected of expectedHeaders) {
+    if (!actualHeaders.includes(expected)) {
+      throw new Error(`${fileLabel} invalide : la colonne '${expected}' est manquante ou mal orthographiée. Colonnes attendues : [${expectedHeaders.join(', ')}], reçues : [${actualHeaders.join(', ')}].`)
     }
   }
-
-  const parsed = new Date(normalized)
-  if (Number.isNaN(parsed.getTime())) {
-    console.log('[traitementCSVService] Date non reconnue:', normalized)
-    return null
-  }
-
-  const displayDate = toDisplayDate(
-    parsed.getUTCFullYear(),
-    parsed.getUTCMonth() + 1,
-    parsed.getUTCDate()
-  )
-  console.log('[traitementCSVService] Date fallback JS ->', displayDate)
-  return displayDate
 }
 
 // Parse une valeur de pourcentage et retourne un nombre (ex: '20%' -> 20)
@@ -166,34 +139,60 @@ function isEmptyRow(row) {
 
 export function traitementFichier1(rows = []) {
   const normalizedRows = Array.isArray(rows) ? rows : []
+  
+  // Validation des colonnes (noms exacts et nombre conforme)
+  validateCsvHeaders(normalizedRows, COLUMNS_FICHIER1, 'Fichier 1 (Produits)')
+
   // Filtre les lignes vides puis normalise chaque champ important
   return normalizedRows
     .filter((row) => !isEmptyRow(row))
-    .map((row, index) => ({
-      ligne: index + 1,
-      date_availability_produit: parseAnyDate(row.date_availability_produit),
-      nom: normalizeText(row.nom),
-      reference: normalizeText(row.reference),
-      prix_ttc: parseLocalizedNumber(row.prix_ttc),
-      taxe: normalizePercentage(row.Taxe || row.taxe),
-      categorie: normalizeText(row.categorie),
-      prix_achat: parseLocalizedNumber(row.prix_achat),
-      quantite: parseLocalizedNumber(row.quantite || row.stock || row.quantity || row['Quantité'] || row['Quantite']) || 0
-    }))
+    .map((row, index) => {
+      const lineNum = index + 1
+      
+      let dateAvailability = null
+      const dateVal = String(row.date_availability_produit ?? '').trim()
+      if (dateVal) {
+        dateAvailability = validateAndFormatDisplayDate(dateVal, 'date_availability_produit', lineNum)
+      }
+
+      const prixTtc = validatePositivePrice(row.prix_ttc, 'prix_ttc', lineNum)
+      const prixAchat = validatePositivePrice(row.prix_achat, 'prix_achat', lineNum)
+
+      return {
+        ligne: lineNum,
+        date_availability_produit: dateAvailability,
+        nom: normalizeText(row.nom),
+        reference: normalizeText(row.reference),
+        prix_ttc: prixTtc,
+        taxe: normalizePercentage(row.Taxe),
+        categorie: normalizeText(row.categorie),
+        prix_achat: prixAchat,
+        quantite: 0
+      }
+    })
 }
 
 export function traitementFichier2(rows = []) {
   const normalizedRows = Array.isArray(rows) ? rows : []
+  
+  // Validation des colonnes (noms exacts et nombre conforme)
+  validateCsvHeaders(normalizedRows, COLUMNS_FICHIER2, 'Fichier 2 (Déclinaisons)')
+
   return normalizedRows
     .filter((row) => !isEmptyRow(row))
-    .map((row, index) => ({
-      ligne: index + 1,
-      reference: normalizeText(row.reference),
-      specificite: normalizeText(row.specificite || row['specificité'] || row['Specificité'] || row['Specificite']),
-      karazany: normalizeText(row.karazany || row['Karazany']),
-      stock_initial: parseLocalizedNumber(row.stock_initial || row['stock_initial'] || row['stock'] || row['Stock']),
-      prix_vente_ttc: parseLocalizedNumber(row.prix_vente_ttc || row['prix_vente_ttc'] || row['prix'] || row['Prix'])
-    }))
+    .map((row, index) => {
+      const lineNum = index + 1
+      const prixVenteTtc = validatePositivePrice(row.prix_vente_ttc, 'prix_vente_ttc', lineNum)
+
+      return {
+        ligne: lineNum,
+        reference: normalizeText(row.reference),
+        specificite: normalizeText(row.specificité),
+        karazany: normalizeText(row.karazany),
+        stock_initial: parseLocalizedNumber(row.stock_initial),
+        prix_vente_ttc: prixVenteTtc
+      }
+    })
 }
 
 // Parse la chaîne de caractères [("T_01";3;"ngoza"),("C_03";1;"")] en tableau d'objets
@@ -221,21 +220,33 @@ export function parseAchat(achatStr) {
 
 export function traitementFichier3(rows = []) {
   const normalizedRows = Array.isArray(rows) ? rows : []
+  
+  // Validation des colonnes (noms exacts et nombre conforme)
+  validateCsvHeaders(normalizedRows, COLUMNS_FICHIER3, 'Fichier 3 (Commandes)')
+
   return normalizedRows
     .filter((row) => !isEmptyRow(row))
-    .map((row, index) => ({
-      ligne: index + 1,
-      date: parseAnyDate(row.date || row.Date),
-      nom: normalizeText(row.nom || row.Nom || row.Name || row.name),
-      email: normalizeText(row.email || row.Email || row.Mail || row.mail),
-      pwd: normalizeText(row.pwd || row.password || row.Password || row.passwd),
-      adresse: normalizeText(row.adresse || row.Adresse || row.Address || row.address),
-      achat: parseAchat(row.achat || row.Achat || row.order || row.Order),
-      etat: normalizeText(row.etat || row.Etat || row.status || row.Status)
-    }))
+    .map((row, index) => {
+      const lineNum = index + 1
+      const dateDisplay = validateAndFormatDisplayDate(row.date, 'date', lineNum)
+
+      return {
+        ligne: lineNum,
+        date: dateDisplay,
+        nom: normalizeText(row.nom),
+        email: normalizeText(row.email),
+        pwd: normalizeText(row.pwd),
+        adresse: normalizeText(row.adresse),
+        achat: parseAchat(row.achat),
+        etat: normalizeText(row.etat)
+      }
+    })
 }
 
 export default {
+  COLUMNS_FICHIER1,
+  COLUMNS_FICHIER2,
+  COLUMNS_FICHIER3,
   traitementFichier1,
   traitementFichier2,
   traitementFichier3

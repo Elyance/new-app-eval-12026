@@ -27,8 +27,9 @@ export async function getCarts() {
 
       return {
         id: Number(cart.id || 0),
-        id_customer: Number(cart.id_customer || 0),
+        id_customer: Number(typeof cart.id_customer === 'object' ? cart.id_customer?.['#text'] : cart.id_customer) || 0,
         id_currency: Number(cart.id_currency["#text"] || 0),
+        date_add: typeof cart.date_add === 'object' ? cart.date_add?.['#text'] : cart.date_add,
         rows: rows
           .filter((row) => row && (row.id_product || row.id_product === 0))
           .map((row) => ({
@@ -83,9 +84,10 @@ export async function getCart(cartId) {
 
     return {
       id: Number(cart.id),
-      id_customer: Number(cart.id_customer || 0),
+      id_customer: Number(typeof cart.id_customer === 'object' ? cart.id_customer?.['#text'] : cart.id_customer) || 0,
       id_currency: Number(cart.id_currency["#text"] || 0),
       id_lang: Number(cart.id_lang["#text"] || 0),
+      date_add: typeof cart.date_add === 'object' ? cart.date_add?.['#text'] : cart.date_add,
       rows: rows
         .filter((row) => row && (row.id_product || row.id_product === 0))
         .map((row) => ({

@@ -28,3 +28,9 @@ export function round2(value) {
   if (!Number.isFinite(parsed)) return null
   return Math.round(parsed * 100) / 100
 }
+
+export function round6(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return null
+  return Math.round(parsed * 1000000) / 1000000
+}

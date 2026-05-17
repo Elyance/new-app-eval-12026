@@ -1,10 +1,17 @@
-import { normalizeText, slugify, toNumber, round2 } from '../utils/importFormatters'
+import { normalizeText, slugify, toNumber, round2, round6 } from '../utils/importFormatters'
 import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 import JSZip from 'jszip'
 import { updateStockInPrestashop } from './stockHelperService'
 import { createAddress, createOrder } from './orderService'
 
+function convertDateToIso(dateStr) {
+  if (!dateStr) return ''
+  const match = String(dateStr).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!match) return dateStr
+  const [, day, month, year] = match
+  return `${year}-${month}-${day}`
+}
 
 /*
  * traitementDonneesService.js
@@ -23,9 +30,9 @@ function buildProductPriceHt(priceTtc, taxRate) {
   const taxe = toNumber(taxRate) || 0
 
   if (ttc === null) return null
-  if (taxe <= 0) return round2(ttc)
+  if (taxe <= 0) return round6(ttc)
 
-  return round2(ttc / (1 + taxe / 100))
+  return round6(ttc / (1 + taxe / 100))
 }
 
 // Transforme une ligne normalisée en objets entités (category, tax, product)
@@ -48,7 +55,7 @@ function splitRowFile1(row) {
     product: {
       name: normalizeText(row.nom),
       reference: normalizeText(row.reference),
-      available_date: normalizeText(row.date_availability_produit),
+      available_date: convertDateToIso(row.date_availability_produit),
       price_ttc: priceTtc,
       price_ht: priceHt,
       taxe: taxRate,
@@ -283,6 +290,7 @@ export async function insertProducts(plan) {
       available_for_order: 1,
       show_price: 1,
       reference: product.reference || '',
+      available_date: product.available_date || '',
       name: { language: { '@_id': '1', '#text': product.name } },
       link_rewrite: { language: { '@_id': '1', '#text': slugify(product.name) } },
       associations: {
@@ -518,11 +526,14 @@ export async function executeFichier2Import(rowsFichier2, planFinal) {
 
       // 3c. Créer la déclinaison (combination)
       const taxRate = toNumber(product.taxe) || 0
-      const combPriceTtc = toNumber(row.prix_vente_ttc) || 0
-      const combPriceHt = round2(combPriceTtc / (1 + taxRate / 100))
-      
       const basePriceHt = toNumber(product.price_ht) || 0
-      const priceImpactHt = round2(combPriceHt - basePriceHt)
+      
+      let priceImpactHt = 0
+      if (row.prix_vente_ttc !== null && row.prix_vente_ttc !== undefined) {
+        const combPriceTtc = toNumber(row.prix_vente_ttc)
+        const combPriceHt = round6(combPriceTtc / (1 + taxRate / 100))
+        priceImpactHt = round6(combPriceHt - basePriceHt)
+      }
 
       const isFirstComb = !hasDefaultCombination[productId]
       if (isFirstComb) {
@@ -747,7 +758,9 @@ async function resolveProductAndCombination(reference, specValue, planFinal, aut
         id_product,
         name,
         price_wt: round2(priceHt * (1 + taxRate / 100)),
-        id_product_attribute: 0
+        id_product_attribute: 0,
+        taxRate,
+        price_ht: priceHt
       }
     }
 
@@ -771,7 +784,9 @@ async function resolveProductAndCombination(reference, specValue, planFinal, aut
           id_product,
           name: `${name} - ${specValue}`,
           price_wt: round2(combPriceHt * (1 + taxRate / 100)),
-          id_product_attribute: combId
+          id_product_attribute: combId,
+          taxRate,
+          price_ht: combPriceHt
         }
       }
     }
@@ -781,7 +796,9 @@ async function resolveProductAndCombination(reference, specValue, planFinal, aut
       id_product,
       name,
       price_wt: round2(priceHt * (1 + taxRate / 100)),
-      id_product_attribute: 0
+      id_product_attribute: 0,
+      taxRate,
+      price_ht: priceHt
     }
   } catch (err) {
     console.error(`[Import Fichier 3] Erreur dans resolveProductAndCombination pour ${reference}:`, err)
@@ -874,7 +891,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
         })
 
         const unitPriceTtc = resolved.price_wt
-        const unitPriceHt = round2(unitPriceTtc / 1.20) // Taxe 20% par défaut pour le total
+        const unitPriceHt = round2(unitPriceTtc / (1 + (resolved.taxRate || 20) / 100)) // Calcul dynamique de la taxe récupérée du produit
 
         orderRows.push({
           product_id: resolved.id_product,
@@ -926,7 +943,8 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
           id_customer: customer.id,
           total_paid: totalPaidTtc,
           secure_key: customer.secure_key,
-          order_rows: orderRows
+          order_rows: orderRows,
+          date_add: convertDateToIso(row.date) + ' 12:00:00'
         })
 
         if (order && order.id) {

@@ -1,6 +1,19 @@
 import { xmlToJson } from '@/utils/xmlParser';
 import { API_URL } from '@/constants/constant';
 
+// Retourne le nom singulier exact utilisé par PrestaShop dans son XML
+function getSingularName(pluralName) {
+    if (pluralName === 'categories') return 'category';
+    if (pluralName === 'taxes') return 'tax';
+    if (pluralName === 'addresses') return 'address';
+    if (pluralName.endsWith('histories')) return pluralName.replace(/histories$/, 'history');
+    if (pluralName.endsWith('deliveries')) return pluralName.replace(/deliveries$/, 'delivery');
+    if (pluralName.endsWith('rules')) return pluralName.replace(/rules$/, 'rule');
+    if (pluralName.endsWith('groups')) return pluralName.replace(/groups$/, 'group');
+    if (pluralName.endsWith('s')) return pluralName.slice(0, -1);
+    return pluralName;
+}
+
 export async function resetData(listModules) {
     try {
         for (const moduleName of listModules) {
@@ -22,7 +35,8 @@ export async function resetTable(moduleName) {
 
         const data = await xmlToJson(await response.text());
 
-        let dataJson = data.prestashop?.[moduleName]?.[moduleName.slice(0, -1)] || [];
+        const singularKey = getSingularName(moduleName);
+        let dataJson = data.prestashop?.[moduleName]?.[singularKey] || [];
 
         if (dataJson && !Array.isArray(dataJson)) {
             dataJson = [dataJson];
@@ -32,13 +46,33 @@ export async function resetTable(moduleName) {
 
         for (let index = 0; index < dataJson.length; index++) {
             const element = dataJson[index];
-            const repDelete = await fetch(`${API_URL}/${moduleName}/${element["@_id"]}`, {
-                method: 'DELETE'
-            });
-            if (!repDelete.ok) {
-                throw new Error(`Erreur lors de la suppression de l'élément ${element["@_id"]} : ${repDelete.statusText}`);
+            const idRaw = element["@_id"] || element.id;
+            const id = idRaw !== undefined && idRaw !== null ? String(idRaw).trim() : '';
+
+            // Ne pas supprimer les catégories système (1 = Racine/Root, 2 = Accueil/Home)
+            if (moduleName === 'categories' && (id === '1' || id === '2')) {
+                console.log(`Catégorie système ${id} préservée (non supprimée)`);
+                continue;
             }
-            console.log(`Élément ${element["@_id"]} supprimé de ${moduleName}`);
+
+            // Ne pas supprimer le client système de base (1 = Admin/Guest/System default)
+            if (moduleName === 'customers' && id === '1') {
+                console.log(`Client système ${id} préservé (non supprimé)`);
+                continue;
+            }
+
+            try {
+                const repDelete = await fetch(`${API_URL}/${moduleName}/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!repDelete.ok) {
+                    console.warn(`[Reset] Impossible de supprimer l'élément ${id} de ${moduleName} (Status: ${repDelete.statusText}). Cet élément est probablement protégé par le système.`);
+                    continue;
+                }
+                console.log(`Élément ${id} supprimé de ${moduleName}`);
+            } catch (err) {
+                console.warn(`[Reset] Exception lors de la suppression de l'élément ${id} de ${moduleName} :`, err);
+            }
         }
         
         return count;

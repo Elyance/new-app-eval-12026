@@ -32,11 +32,11 @@
           Produits
         </router-link>
         <router-link 
-          to="/backoffice/modules/clients"
+          to="/backoffice/modules/commandes"
           class="nav-link text-dark text-decoration-none ps-2 rounded mb-2"
-          :class="{ 'text-primary fw-bold': isActive('/backoffice/modules/clients') }"
+          :class="{ 'text-primary fw-bold': isActive('/backoffice/modules/commandes') }"
         >
-          Clients
+          Commandes
         </router-link>
       </div>
 

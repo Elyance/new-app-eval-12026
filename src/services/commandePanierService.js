@@ -5,6 +5,7 @@ import { getCarts, getCart } from './cartService'
 import { getOrderStateById } from './orderService'
 import { getCustomerById } from './customerService'
 import { findCarrierById } from './carrierService'
+import { getProductDetail } from './productService'
 
 function toUiState(orderStateId) {
   const normalizedStateId = Number(orderStateId || 0)
@@ -12,6 +13,43 @@ function toUiState(orderStateId) {
   if (normalizedStateId === 1) return 1
   if (normalizedStateId === 2) return 2
   return normalizedStateId || 1
+}
+
+/**
+ * Calcule le total TTC d'un panier à partir des prix des produits et de leurs déclinaisons.
+ * @param {Object} cart
+ * @returns {number} total TTC
+ */
+export async function calculateCartTotal(cart) {
+  if (!cart || !Array.isArray(cart.rows) || cart.rows.length === 0) return 0
+  
+  let total = 0
+  for (const row of cart.rows) {
+    try {
+      const product = await getProductDetail(row.id_product)
+      if (product) {
+        let price = Number(product.price || 0) // prix TTC de base du produit
+        
+        // Si c'est une déclinaison, on applique l'impact de prix
+        if (row.id_product_attribute > 0) {
+          const comb = (product.combinations || []).find(
+            c => Number(c.id) === Number(row.id_product_attribute)
+          )
+          if (comb) {
+            // L'impact de prix dans la combinaison est hors taxe, on lui applique la taxe du produit
+            const priceHtImpact = Number(comb.price || 0)
+            const priceTtcImpact = priceHtImpact * (1 + (product.taxRate || 0) / 100)
+            price += priceTtcImpact
+          }
+        }
+        
+        total += price * Number(row.quantity || 0)
+      }
+    } catch (err) {
+      console.error(`Erreur calcul prix article panier pour produit ${row.id_product}:`, err)
+    }
+  }
+  return Number(total.toFixed(2))
 }
 
 /**
@@ -176,6 +214,7 @@ export async function getFinalList() {
         date: foundOrder.date_add || ''
       })
     } else {
+      const cartTotal = await calculateCartTotal(cart)
       result.push({
         id: null,
         cartId: cart.id,
@@ -183,11 +222,11 @@ export async function getFinalList() {
         isNewCustomer: rawCustomerId === 0,
         shipping: carrierName,
         customer: customerName,
-        total: 0,
+        total: cartTotal,
         payment: '',
         currentState: 1,
         status: 'Dans le panier',
-        date: ''
+        date: cart.date_add || ''
       })
     }
   }
@@ -199,5 +238,6 @@ export default {
   getOrderByIdCart,
   hasOrder,
   getCommandeDetail,
-  getFinalList
+  getFinalList,
+  calculateCartTotal
 }

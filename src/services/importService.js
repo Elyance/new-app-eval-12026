@@ -1,15 +1,28 @@
 import { useFileValidator } from './useFileValidator'
 import Papa from 'papaparse'
+import { traitementFichier1, traitementFichier2, traitementFichier3 } from './traitementCSVService'
+import {
+  buildFichier1ImportPlan,
+  executeImportPlan,
+  insertProducts,
+  uploadProductImages,
+  executeFichier2Import,
+  executeFichier3Import
+} from './traitementDonneesService'
+import { resetData } from './ResetService'
+import { getModules } from './ModulesService'
 
 /*
  * importService.js
  * - Valide la présence et le type des fichiers (3 CSV + ZIP) via `useFileValidator`
  * - Parse les CSV avec PapaParse (header: true)
+ * - Orchestre l'importation complète via le pipeline runFullImportPipeline avec rollback transactionnel
  *
  * Fonctions principales exposées:
  *  - validateImportFiles({ csvFiles, zipFile }) -> { valid, errors, files }
  *  - parseCsvFile(file) -> Promise<rows>
  *  - parseCsvFiles(files) -> Promise< [{fileName, rows}] >
+ *  - runFullImportPipeline({ csvFiles, zipFile }, onProgress) -> Promise<summary>
  */
 
 const { validateFiles } = useFileValidator()
@@ -104,9 +117,79 @@ export function getImportFileSummary({ csvFiles = [], zipFile = null } = {}) {
   }
 }
 
+// Orchestre le pipeline complet d'importation
+export async function runFullImportPipeline({ csvFiles = [], zipFile = null }, onProgress = () => {}) {
+  // 1) Validation des fichiers
+  onProgress('Validation des fichiers en cours...')
+  const validation = await validateImportFiles({ csvFiles, zipFile })
+  if (!validation.valid) {
+    throw new Error(validation.errors.join(' | '))
+  }
+
+  // 2) Parsing des fichiers CSV
+  onProgress('Lecture et parsing des fichiers CSV...')
+  const parsedCsvFiles = await parseCsvFiles(validation.files.csvFiles)
+
+  // 3) Traitement et importation du Fichier 1
+  const fichier1 = parsedCsvFiles[0]
+  if (!fichier1) {
+    throw new Error('Le fichier 1 (Produits) est requis.')
+  }
+
+  onProgress('Normalisation et validation du Fichier 1 (Produits)...')
+  const fichier1Traite = traitementFichier1(fichier1.rows)
+
+  onProgress('Préparation du plan d’import (Fichier 1)...')
+  const planImportFichier1 = buildFichier1ImportPlan(fichier1Traite)
+
+  try {
+    onProgress('Création des Catégories et des Taxes dans PrestaShop...')
+    const planEnrichi = await executeImportPlan(planImportFichier1)
+
+    onProgress('Insertion des nouveaux Produits dans PrestaShop...')
+    const planFinal = await insertProducts(planEnrichi)
+
+    // 4) Upload des images si le ZIP est présent
+    if (validation.files.zipFile) {
+      onProgress('Extraction et envoi des images produits...')
+      await uploadProductImages(validation.files.zipFile, planFinal)
+    }
+
+    // 5) Traitement et importation du Fichier 2
+    const fichier2 = parsedCsvFiles[1]
+    if (fichier2) {
+      onProgress('Normalisation et Importation des déclinaisons et stocks (Fichier 2)...')
+      const fichier2Traite = traitementFichier2(fichier2.rows)
+      await executeFichier2Import(fichier2Traite, planFinal)
+    }
+
+    // 6) Traitement et importation du Fichier 3
+    const fichier3 = parsedCsvFiles[2]
+    if (fichier3) {
+      onProgress('Normalisation et Importation des paniers et commandes (Fichier 3)...')
+      const fichier3Traite = traitementFichier3(fichier3.rows)
+      await executeFichier3Import(fichier3Traite, planFinal)
+    }
+  } catch (error) {
+    onProgress('Erreur durant l\'importation. Nettoyage de la base de données en cours...')
+    try {
+      const modules = await getModules()
+      await resetData(modules)
+      console.log('[importService] Base de données réinitialisée avec succès suite à l\'erreur.')
+    } catch (resetError) {
+      console.error('[importService] Échec de la réinitialisation de la base de données :', resetError)
+    }
+    throw error // On propage l'erreur d'origine pour l'affichage dans l'UI
+  }
+
+  onProgress('Importation terminée avec succès !')
+  return getImportFileSummary(validation.files)
+}
+
 export default {
   validateImportFiles,
   parseCsvFile,
   parseCsvFiles,
-  getImportFileSummary
+  getImportFileSummary,
+  runFullImportPipeline
 }

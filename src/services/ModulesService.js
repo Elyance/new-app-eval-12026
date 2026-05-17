@@ -52,6 +52,14 @@ export async function getModules() {
         "specific_prices",
         "specific_price_rules",
         "products",
+
+
+        //── 7. Catégories et Taxes ───────────────────────────────────
+
+        "categories", 
+        "tax_rule_groups",       
+        "taxes",                 
+        "tax_rules"
     ];
     return prestashopTablesToReset;
 }

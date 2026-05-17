@@ -65,13 +65,13 @@ export function generateStockAvailableXml(payload) {
  * 1) Récupérer le `stock_available` existant pour le produit (+ combinaison)
  * 2) Poster un `stock_movement` (historique)
  * 3) Mettre à jour le `stock_available` (PUT)
- * Retourne true si succès, false sinon.
+ * Retourne le stock_available récupéré si succès, null sinon.
  */
-export async function updateStockInPrestashop(productId, combinationId = 0, deltaQuantity) {
+export async function createStockMovement(productId, combinationId = 0, deltaQuantity, id_order = 0) {
   try {
     const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
 
-    // 1. Fetch current stock_available
+    // 1. Récupérer stock_available pour avoir l'id_stock_available (id_stock requis)
     let url = `${API_URL}/stock_availables?filter[id_product]=${productId}`
     if (combinationId) {
       url += `&filter[id_product_attribute]=${combinationId}`
@@ -88,7 +88,7 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
     let stockAvailable = jsonData?.prestashop?.stock_availables?.stock_available
     if (!stockAvailable) {
       console.warn(`No stock_available found for product ${productId} and combination ${combinationId}`)
-      return false
+      return null
     }
     if (Array.isArray(stockAvailable)) {
       stockAvailable = stockAvailable[0]
@@ -96,17 +96,9 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
 
     const extractValue = (obj) => typeof obj === 'object' && obj !== null ? (obj['#text'] || '') : obj;
     const id_stock_available = extractValue(stockAvailable.id) || stockAvailable['@_id']
-    const currentQuantity = parseInt(extractValue(stockAvailable.quantity) || 0)
-    const id_shop = extractValue(stockAvailable.id_shop) || 1
-    const id_shop_group = extractValue(stockAvailable.id_shop_group) || 0
-    const out_of_stock = extractValue(stockAvailable.out_of_stock) || 2
-    const depends_on_stock = extractValue(stockAvailable.depends_on_stock) || 0
-    const location = extractValue(stockAvailable.location) || ''
-
-    const newQuantity = currentQuantity + deltaQuantity
     const dateNow = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
-    // 2. Insert into stock_movements (POST)
+    // 2. Poster le stock_movement
     const mvtPayload = {
       id_product: productId,
       id_product_attribute: combinationId || 0,
@@ -116,6 +108,7 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
       physical_quantity: Math.abs(deltaQuantity),
       sign: deltaQuantity > 0 ? 1 : -1,
       price_te: 0,
+      id_order: id_order || 0,
       date_add: dateNow
     }
 
@@ -132,9 +125,40 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
 
     if (!mvtResponse.ok) {
       console.error("Erreur création stock_movement:", await mvtResponse.text())
+      return null
     }
 
-    // 3. Update stock_available (PUT)
+    console.log(`Mouvement de stock enregistré avec succès : id_stock_available=${id_stock_available}, qty=${deltaQuantity}, id_order=${id_order}`)
+    return stockAvailable
+  } catch (err) {
+    console.error("Erreur dans createStockMovement:", err)
+    return null
+  }
+}
+
+export async function updateStockInPrestashop(productId, combinationId = 0, deltaQuantity) {
+  try {
+    const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+
+    // 1. Appeler createStockMovement pour insérer le mouvement ET récupérer le stock_available existant
+    const stockAvailable = await createStockMovement(productId, combinationId, deltaQuantity, 0)
+    if (!stockAvailable) {
+      console.warn(`Impossible de mettre à jour le stock car le mouvement n'a pas pu être inséré pour le produit ${productId}`)
+      return false
+    }
+
+    const extractValue = (obj) => typeof obj === 'object' && obj !== null ? (obj['#text'] || '') : obj;
+    const id_stock_available = extractValue(stockAvailable.id) || stockAvailable['@_id']
+    const currentQuantity = parseInt(extractValue(stockAvailable.quantity) || 0)
+    const id_shop = extractValue(stockAvailable.id_shop) || 1
+    const id_shop_group = extractValue(stockAvailable.id_shop_group) || 0
+    const out_of_stock = extractValue(stockAvailable.out_of_stock) || 2
+    const depends_on_stock = extractValue(stockAvailable.depends_on_stock) || 0
+    const location = extractValue(stockAvailable.location) || ''
+
+    const newQuantity = currentQuantity + deltaQuantity
+
+    // 2. Mettre à jour stock_available (PUT)
     const availPayload = {
       id: id_stock_available,
       id_product: productId,
@@ -171,11 +195,90 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
   }
 }
 
+export async function getStockAvailables(productId) {
+  try {
+    const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+    
+    // 1. Récupérer tous les stock_availables pour ce produit
+    const urlStock = `${API_URL}/stock_availables?filter[id_product]=${productId}&display=full`
+    const resStock = await fetch(urlStock, { headers: authHeader })
+    if (!resStock.ok) return []
+    
+    const xmlStock = await resStock.text()
+    const jsonStock = await xmlToJson(xmlStock)
+    const stockNodes = jsonStock?.prestashop?.stock_availables?.stock_available || []
+    console.log("stock_availables raw", jsonStock)
+    const stockArray = Array.isArray(stockNodes) ? stockNodes : [stockNodes]
+    console.log("stockArray raw", stockArray)
+    
+    const extractValue = (obj) => typeof obj === 'object' && obj !== null ? (obj['#text'] || '') : obj;
+    
+    return stockArray
+      .map(s => ({
+        id: Number(extractValue(s.id) || s['@_id'] || 0),
+        id_product: Number(extractValue(s.id_product) || 0),
+        id_product_attribute: Number(extractValue(s.id_product_attribute) || 0),
+        quantity: Number(extractValue(s.quantity) || 0)
+      }))
+      .filter(s => s.id > 0)
+  } catch (err) {
+    console.error("Erreur lors de la recuperation des stocks availables:", err)
+    return []
+  }
+}
+
+export async function getStockMovements(productId) {
+  try {
+    const stockAvailables = await getStockAvailables(productId)
+    console.log("stockAvailables resolved", stockAvailables)
+    if (!Array.isArray(stockAvailables) || stockAvailables.length === 0) return []
+
+    const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+    const stockMovements = []
+
+    for (const stockAvailable of stockAvailables) {
+      const urlStock = `${API_URL}/stock_movements?filter[id_stock]=${stockAvailable.id}&display=full`
+      const resStock = await fetch(urlStock, { headers: authHeader })
+      if (!resStock.ok) continue
+      
+      const xmlStock = await resStock.text()
+      const jsonStock = await xmlToJson(xmlStock)
+      const stockNodes = jsonStock?.prestashop?.stock_mvts?.stock_mvt || jsonStock?.prestashop?.stock_movements?.stock_mvt || []
+      const stockArray = Array.isArray(stockNodes) ? stockNodes : [stockNodes]
+      
+      const extractValue = (obj) => typeof obj === 'object' && obj !== null ? (obj['#text'] || '') : obj;
+
+      const formattedMvts = stockArray
+        .filter(m => m && extractValue(m.id))
+        .map(m => ({
+          id: Number(extractValue(m.id)),
+          id_stock: Number(extractValue(m.id_stock) || 0),
+          id_product_attribute: Number(extractValue(m.id_product_attribute) || 0),
+          quantity: Number(extractValue(m.physical_quantity) || 0),
+          sign: Number(extractValue(m.sign) || 1),
+          date_add: extractValue(m.date_add) || '',
+          id_order: Number(extractValue(m.id_order) || 0),
+          id_stock_mvt_reason: Number(extractValue(m.id_stock_mvt_reason) || 0)
+        }))
+      stockMovements.push(...formattedMvts)
+    }
+    
+    // Trier tous les mouvements par date_add décroissante (plus récents en premier)
+    console.log("stockMovements", stockMovements)
+    return stockMovements.sort((a, b) => new Date(b.date_add) - new Date(a.date_add))
+  } catch (err) {
+    console.error("Erreur dans getStockMovements:", err)
+    return []
+  }
+}
+
 export default {
   computeMatchingCombination,
   buildStockMovementPayload,
   buildStockAvailablePayload,
   generateStockMovementXml,
   generateStockAvailableXml,
-  updateStockInPrestashop
+  updateStockInPrestashop,
+  getStockMovements,
+  createStockMovement
 }

@@ -40,17 +40,8 @@
 </template>
 
 <script>
-// Page d'import statique utilisée pour tester le pipeline CSV -> normalisation -> plan d'import
-// Étapes documentées:
-// 1) validateImportFiles : vérifie présence/format des fichiers (3 CSV + ZIP)
-// 2) parseCsvFiles : parse les CSV avec PapaParse
-// 3) traitementFichier1 : normalise les lignes (dates, nombres, etc.)
-// 4) buildFichier1ImportPlan : prépare le plan d'import pour PrestaShop
-// 5) executeImportPlan : crée les catégories et les taxes via l'API
-// 6) insertProducts : insère les produits via l'API
-import { validateImportFiles, getImportFileSummary, parseCsvFiles } from '../../../services/importService'
-import { traitementFichier1, traitementFichier2, traitementFichier3 } from '../../../services/traitementCSVService'
-import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts, uploadProductImages, executeFichier2Import, executeFichier3Import } from '../../../services/traitementDonneesService'
+// Page d'import statique utilisant le pipeline unifié de importService
+import { runFullImportPipeline } from '../../../services/importService'
 
 export default {
   name: 'ImportStatic',
@@ -71,87 +62,30 @@ export default {
         zipName: zipFile?.name || ''
       })
 
-      // 1) Validation basique des fichiers
-      const validation = await validateImportFiles({ csvFiles, zipFile })
-      console.log('[ImportStatic] Résultat validation', validation)
-      this.validationErrors = validation.errors
-
-      if (!validation.valid) {
-        this.success = false
-        this.message = 'Les fichiers sélectionnés ne sont pas valides.'
-        return
-      }
-
-      // 2) Parsing des CSV
       this.isSubmitting = true
+      this.success = false
+      this.validationErrors = []
+      this.message = 'Initialisation de l\'importation...'
+
       try {
-        console.log('[ImportStatic] Début du parsing CSV')
-        const parsedCsvFiles = await parseCsvFiles(validation.files.csvFiles)
-        console.log('[ImportStatic] Parsing CSV terminé', parsedCsvFiles)
-
-        // 3) On traite le premier CSV (format attendu par traitementFichier1)
-        const fichier1 = parsedCsvFiles[0]
-        if (fichier1) {
-          console.log('[ImportStatic] CSV 1 brut', fichier1.rows)
-          const fichier1Traite = traitementFichier1(fichier1.rows)
-          console.log('[ImportStatic] CSV 1 traité', fichier1Traite)
-
-          // 4) Préparer un plan d'import (catégories/taxes/produits)
-          const planImportFichier1 = buildFichier1ImportPlan(fichier1Traite)
-          console.log('[ImportStatic] Plan d’import fichier 1', planImportFichier1)
-          logFichier1ImportPlan(planImportFichier1)
-
-          // 5) Exécuter la création des entités parentes (Catégories et Taxes)
-          console.log('[ImportStatic] Création des Catégories et Taxes via l\'API...')
-          const planEnrichi = await executeImportPlan(planImportFichier1)
-
-          // 6) Insérer les produits avec les bons IDs
-          console.log('[ImportStatic] Insertion des Produits via l\'API...')
-          const planFinal = await insertProducts(planEnrichi)
-          
-          // 7) Uploader les images (seulement si on a un zip et des produits créés)
-          if (validation.files.zipFile) {
-            console.log('[ImportStatic] Traitement et Upload des Images depuis le ZIP...')
-            await uploadProductImages(validation.files.zipFile, planFinal)
-          }
-
-          // 8) Traitement et Importation du Fichier 2 (Déclinaisons et Stocks)
-          const fichier2 = parsedCsvFiles[1]
-          if (fichier2) {
-            console.log('[ImportStatic] CSV 2 brut', fichier2.rows)
-            const fichier2Traite = traitementFichier2(fichier2.rows)
-            console.log('[ImportStatic] CSV 2 traité', fichier2Traite)
-
-            console.log('[ImportStatic] Lancement de l\'importation des déclinaisons et stocks (Fichier 2)...')
-            const resultFichier2 = await executeFichier2Import(fichier2Traite, planFinal)
-            console.log('[ImportStatic] Importation Fichier 2 terminée !', resultFichier2)
-          }
-
-          // 9) Traitement et Importation du Fichier 3 (Clients, Paniers et Commandes)
-          const fichier3 = parsedCsvFiles[2]
-          if (fichier3) {
-            console.log('[ImportStatic] CSV 3 brut', fichier3.rows)
-            const fichier3Traite = traitementFichier3(fichier3.rows)
-            console.log('[ImportStatic] CSV 3 traité', fichier3Traite)
-
-            console.log('[ImportStatic] Lancement de l\'importation des clients, paniers et commandes (Fichier 3)...')
-            const resultFichier3 = await executeFichier3Import(fichier3Traite, planFinal)
-            console.log('[ImportStatic] Importation Fichier 3 terminée !', resultFichier3)
-          }
-
-          console.log('[ImportStatic] Import complet terminé avec succès !', planFinal)
-        }
-
-        const summary = getImportFileSummary(validation.files)
+        const summary = await runFullImportPipeline({ csvFiles, zipFile }, (stepMessage) => {
+          console.log('[ImportStatic] Progrès :', stepMessage)
+          this.message = stepMessage
+        })
 
         this.isSubmitting = false
         this.success = true
-        this.message = `Importation terminée ! Fichiers traités : ${summary.csvNames.join(', ')}`
+        this.message = `Importation terminée avec succès ! Fichiers traités : ${summary.csvNames.join(', ')}`
       } catch (error) {
-        console.error('[ImportStatic] Erreur pendant le parsing CSV', error)
+        console.error('[ImportStatic] Échec de l\'importation', error)
         this.isSubmitting = false
         this.success = false
-        this.message = 'Une erreur est survenue pendant le parsing des CSV.'
+        if (error.message && error.message.includes(' | ')) {
+          this.validationErrors = error.message.split(' | ')
+          this.message = 'Les fichiers sélectionnés ne sont pas valides.'
+        } else {
+          this.message = error.message || 'Une erreur est survenue pendant l\'importation.'
+        }
       }
     }
   }
