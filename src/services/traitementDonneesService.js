@@ -1,6 +1,7 @@
 import { normalizeText, slugify, toNumber, round2 } from '../utils/importFormatters'
 import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
+import JSZip from 'jszip'
 
 
 /*
@@ -321,9 +322,78 @@ export async function insertProducts(plan) {
   }
 }
 
+/**
+ * uploadProductImages(zipFile, planFinal)
+ * Parcourt le ZIP d'images, cherche une correspondance avec la référence de chaque
+ * produit créé, et upload l'image via l'API PrestaShop.
+ */
+export async function uploadProductImages(zipFile, planFinal) {
+  if (!zipFile || !planFinal.createdProducts || planFinal.createdProducts.length === 0) {
+    return planFinal
+  }
+
+  try {
+    const zip = await JSZip.loadAsync(zipFile)
+    
+    // Créer un dictionnaire des images par nom de fichier sans extension (en minuscules)
+    const imageEntries = {}
+    zip.forEach((relativePath, zipEntry) => {
+      if (!zipEntry.dir) {
+        const filename = relativePath.split('/').pop()
+        const basename = filename.substring(0, filename.lastIndexOf('.')).toLowerCase()
+        if (basename) {
+          imageEntries[basename] = zipEntry
+        }
+      }
+    })
+
+    // Boucler sur les produits créés
+    for (const product of planFinal.createdProducts) {
+      if (!product.reference || !product.id_product_prestashop) continue
+
+      const refLower = String(product.reference).toLowerCase().trim()
+      const zipEntry = imageEntries[refLower]
+
+      if (zipEntry) {
+        console.log(`[Import] Upload de l'image pour ${product.reference} (ID Produit: ${product.id_product_prestashop})...`)
+        
+        // Convertir l'entrée du ZIP en Blob (fichier)
+        const blob = await zipEntry.async('blob')
+        
+        // Préparer le formulaire multipart
+        const formData = new FormData()
+        formData.append('image', blob, zipEntry.name.split('/').pop())
+
+        // Appel POST à l'API d'images
+        const res = await fetch(`${API_URL}/images/products/${product.id_product_prestashop}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+            // NE PAS METTRE DE Content-Type ICI ! fetch() s'en charge avec le "boundary"
+          },
+          body: formData
+        })
+
+        if (res.ok) {
+           console.log(`[Import] Image uploadée avec succès pour ${product.reference}`)
+        } else {
+           console.error(`[Import] Erreur upload image pour ${product.reference}:`, await res.text())
+        }
+      } else {
+        console.warn(`[Import] Aucune image trouvée dans le ZIP pour la référence ${product.reference}`)
+      }
+    }
+  } catch (error) {
+    console.error("[Import] Erreur lors du traitement du ZIP des images:", error)
+  }
+
+  return planFinal
+}
+
 export default {
   buildFichier1ImportPlan,
   logFichier1ImportPlan,
   executeImportPlan,
-  insertProducts
+  insertProducts,
+  uploadProductImages
 }

@@ -50,7 +50,7 @@
 // 6) insertProducts : insère les produits via l'API
 import { validateImportFiles, getImportFileSummary, parseCsvFiles } from '../../../services/importService'
 import { traitementFichier1 } from '../../../services/traitementCSVService'
-import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts } from '../../../services/traitementDonneesService'
+import { buildFichier1ImportPlan, logFichier1ImportPlan, executeImportPlan, insertProducts, uploadProductImages } from '../../../services/traitementDonneesService'
 
 export default {
   name: 'ImportStatic',
@@ -108,6 +108,13 @@ export default {
           // 6) Insérer les produits avec les bons IDs
           console.log('[ImportStatic] Insertion des Produits via l\'API...')
           const planFinal = await insertProducts(planEnrichi)
+          
+          // 7) Uploader les images (seulement si on a un zip et des produits créés)
+          if (validation.files.zipFile) {
+            console.log('[ImportStatic] Traitement et Upload des Images depuis le ZIP...')
+            await uploadProductImages(validation.files.zipFile, planFinal)
+          }
+
           console.log('[ImportStatic] Import terminé avec succès !', planFinal)
         }
 
