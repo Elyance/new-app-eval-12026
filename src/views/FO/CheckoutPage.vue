@@ -14,7 +14,7 @@ import { createGuestCustomer, createAddress, createOrder } from '../../services/
 import { cartStore } from '../../stores/cartStore'
 import { useOrderStore } from '../../stores/orderStore'
 import { authStore } from '../../stores/authStore'
-import { getCustomerAddresses } from '../../services/customerService'
+import { getCustomerAddresses, getAllCustomers } from '../../services/customerService'
 import { getXmlString } from '../../utils/parsing'
 import { API_URL } from '../../constants/constant'
 import '../../styles/checkout.css'
@@ -60,6 +60,46 @@ const subtotal = computed(() => {
 const shipping = computed(() => 0)
 
 const total = computed(() => subtotal.value + shipping.value)
+
+// Charger la listes des clients pour la selection de profil
+const customers = ref([])
+const selectedCustomerId = ref(null)
+ 
+onMounted(async () => {
+  try {
+    customers.value = await getAllCustomers()
+  } catch (err) {
+    console.error('Erreur de chargement des clients', err)
+  }
+})
+
+/**
+ * Gère la sélection d'un client
+ */
+const handleSelect = (customer) => {
+  // Connecter localement le client sélectionné
+  authStore.logout()
+  authStore.login(customer)
+  selectedCustomerId.value = customer.id
+
+  // Préremplir le formulaire immédiatement
+  form.firstname = getXmlString(customer.firstname || '')
+  form.lastname = getXmlString(customer.lastname || '')
+  form.email = getXmlString(customer.email || '')
+
+  // Charger les adresses du client et préremplir si disponible
+  getCustomerAddresses(customer.id).then(addresses => {
+    if (addresses && addresses.length > 0) {
+      const addr = addresses[0]
+      form.address1 = getXmlString(addr.address1)
+      form.postcode = getXmlString(addr.postcode)
+      form.city = getXmlString(addr.city)
+      form.id_country = addr.id_country ? Number(addr.id_country) : form.id_country
+    }
+  }).catch(err => {
+    console.error('Erreur chargement adresses client sélectionné', err)
+  })
+}
 
 /**
  * Charge le panier, les pays et les transporteurs
@@ -267,19 +307,30 @@ const handleSubmitOrder = async () => {
 
     console.log('Adresse créée:', address)
 
-    // 4. Construire les order_rows
-    const orderRows = cartItems.value.map(item => ({
-      product_id: item.id,
-      product_attribute_id: item.id_product_attribute || 0,
-      product_quantity: item.quantity,
-      product_name: item.name,
-      product_reference: item.reference || '',
-      product_price: item.price,
-      unit_price_tax_incl: item.price,
-      unit_price_tax_excl: item.price
-    }))
+    // 4. Construire les order_rows et calculer les totaux de manière stricte
+    const orderRows = cartItems.value.map(item => {
+      const qty = Number(item.quantity || 0)
+      const unitIncl = Number(Number(item.price || 0).toFixed(2))
+      const unitExcl = Number(unitIncl.toFixed(2)) // si vous avez la valeur HT, remplacez ici
+      return {
+        product_id: item.id,
+        product_attribute_id: item.id_product_attribute || 0,
+        product_quantity: qty,
+        product_name: item.name,
+        product_reference: item.reference || '',
+        product_price: unitIncl,
+        unit_price_tax_incl: unitIncl,
+        unit_price_tax_excl: unitExcl
+      }
+    })
 
-    // 5. Créer la commande
+    // Calculer les totaux à partir des orderRows pour éviter toute divergence
+    const totalProductsCalc = orderRows.reduce((sum, r) => sum + Number(r.unit_price_tax_incl) * Number(r.product_quantity), 0)
+    const totalProductsFixed = Number(totalProductsCalc.toFixed(2))
+    const shippingFixed = Number(Number(shipping.value || 0).toFixed(2))
+    const totalPaidFixed = Number((totalProductsFixed + shippingFixed).toFixed(2))
+
+    // 5. Créer la commande en envoyant des montants formatés (2 décimales)
     const order = await createOrder({
       id_address_delivery: address.id,
       id_address_invoice: address.id,
@@ -290,12 +341,12 @@ const handleSubmitOrder = async () => {
       id_lang: 1,
       module: form.module,
       payment: form.payment,
-      total_paid: total.value,
-      total_paid_tax_incl: total.value,
-      total_paid_tax_excl: subtotal.value,
-      total_products: subtotal.value,
-      total_products_wt: subtotal.value,
-      total_shipping: shipping.value,
+      total_paid: totalPaidFixed,
+      total_paid_tax_incl: totalPaidFixed,
+      total_paid_tax_excl: Number((totalProductsFixed).toFixed(2)),
+      total_products: totalProductsFixed,
+      total_products_wt: totalProductsFixed,
+      total_shipping: shippingFixed,
       secure_key: customer.secure_key || '',
       order_rows: orderRows
     })
@@ -389,6 +440,26 @@ const handleSubmitOrder = async () => {
       <div v-else class="checkout-content">
         <!-- Colonne Gauche: Formulaire -->
         <div>
+          <div class="selection-container">
+            <h2>Se connecter en tant que : </h2>
+            <div class="customer-list">
+              <div 
+                v-for="customer in customers" 
+                :key="customer.id" 
+                class="customer-card"
+                :class="{ selected: selectedCustomerId === customer.id }"
+                @click="handleSelect(customer)"
+                role="button"
+                tabindex="0"
+              >
+                <div class="avatar">{{ customer.firstname.charAt(0) }}{{ customer.lastname.charAt(0) }}</div>
+                <div class="customer-info">
+                  <h3>{{ customer.firstname }} {{ customer.lastname }}</h3>
+                  <p>{{ customer.email }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
           <!-- Informations personnelles -->
           <div class="checkout-form-section">
             <h2 class="form-section-title">
@@ -588,3 +659,120 @@ const handleSubmitOrder = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.home-page {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(135deg, #f3f4f6, #ffffff);
+}
+
+.container {
+  width: 100%;
+  max-width: 1000px;
+  padding: 40px 20px;
+}
+
+h1 {
+  font-size: 2.5rem;
+  color: #1f2937;
+  margin-bottom: 10px;
+}
+
+p {
+  font-size: 1.1rem;
+  color: #6b7280;
+  margin-bottom: 30px;
+}
+
+.selection-container {
+  width: 100%;
+}
+
+.customer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.customer-card {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.customer-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #d1d5db;
+}
+
+.customer-card.selected {
+  border-color: #2563eb;
+  background: linear-gradient(90deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));
+  box-shadow: 0 6px 18px rgba(37,99,235,0.06);
+}
+
+.anonymous-card {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+}
+
+.anonymous-card:hover {
+  border-style: solid;
+  border-color: #94a3b8;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #475569;
+  margin-right: 15px;
+  flex-shrink: 0;
+}
+
+.customer-info {
+  text-align: left;
+}
+
+.customer-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  color: #1e293b;
+}
+
+.customer-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.loading {
+  font-size: 1.2rem;
+  color: #6b7280;
+}
+
+.customer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+</style>

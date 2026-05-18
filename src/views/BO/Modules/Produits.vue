@@ -588,6 +588,13 @@ export default {
             variantLabel
           }
         })
+
+        // Pré-sélectionner automatiquement une date qui a réellement des mouvements
+        // pour éviter d'afficher un écran vide au premier rendu du popup.
+        // if (!this.selectedHistoryDate && this.historyMovements.length > 0) {
+        //   const firstMovementDate = String(this.historyMovements[0].date_add || '').slice(0, 10)
+        //   this.selectedHistoryDate = firstMovementDate
+        // }
       } catch (error) {
         console.error('Erreur lors du chargement de l\'historique des stocks:', error)
       } finally {
