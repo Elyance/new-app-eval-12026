@@ -1,0 +1,22 @@
+// order 
+{
+  "order": {
+    "id_address_delivery": "1",
+    "id_address_invoice": "1",
+    "id_cart": "1",
+    "id_currency": "1",
+    "id_lang": "1",
+    "id_customer": "1",
+    "id_carrier": "1",
+    "module": "ps_cashondelivery",
+    "payment": "Paiement à la livraison",
+    "total_paid": "15.000000",
+    "total_paid_real": "15.000000",
+    "total_products": "15.000000",
+    "total_products_wt": "15.000000",
+    "total_shipping": "0.000000",
+    "total_discounts": "0.000000",
+    "conversion_rate": "1.000000",
+    "current_state": "1"
+  }
+}
