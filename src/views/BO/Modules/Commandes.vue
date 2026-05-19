@@ -39,15 +39,22 @@
             <td class="fw-bold">{{ formatCurrency(order.total) }}</td>
             <td>{{ order.payment || '-' }}</td>
             <td>
-              <select v-model.number="order.currentState" @change="updateStatus(order)" class="form-select form-select-sm">
-                <option :value="1">Dans le panier</option>
-                <option :value="2">Paiement effectué</option>
-                <option :value="3">Annulé</option>
-              </select>
+              <span class="badge" :class="getStatusBadgeClass(order)">{{ order.status || 'Etat inconnu' }}</span>
             </td>
             <td>{{ formatDate(order.date) }}</td>
             <td>
-              <button class="btn btn-sm btn-info" @click="viewDetails(order)">Détails</button>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-sm btn-info" @click="viewDetails(order)">Détails</button>
+
+                <template v-if="order.currentState === 2">
+                  <button class="btn btn-sm btn-outline-danger" @click="changeOrderState(order, 6)">
+                    Annuler
+                  </button>
+                  <button class="btn btn-sm btn-outline-success" @click="changeOrderState(order, 5)">
+                    Livrer
+                  </button>
+                </template>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -69,8 +76,9 @@
 </template>
 
 <script>
-import { getFinalList } from '@/services/commandePanierService'
+import { getFinalList, getOrderByIdCart } from '@/services/commandePanierService'
 import { addOrderHistory } from '@/services/orderService'
+import { createStockMovement } from '@/services/stockHelperService'
 
 export default {
   name: 'Commandes',
@@ -111,66 +119,78 @@ export default {
       if (!dateString) return '-'
       return new Date(dateString).toLocaleDateString('fr-FR');
     },
+    getStatusBadgeClass(order) {
+      const state = Number(order?.currentState || 0)
+      if (state === 1) return 'text-bg-secondary'
+      if (state === 2) return 'text-bg-warning'
+      if (state === 3) return 'text-bg-danger'
+      if (state === 5) return 'text-bg-success'
+      return 'text-bg-dark'
+    },
     setStatusMessage(message, type = 'info') {
       this.statusMessage = message
       this.statusMessageType = type
     },
-    async updateStatus(order) {
-      const nextState = Number(order.currentState)
-      const previousState = Number(order._previousState || nextState)
+    async changeOrderState(order, targetStateId) {
+      const currentState = Number(order?.currentState || 0)
 
-      if (nextState === previousState) {
+      if (currentState !== 2) {
+        this.setStatusMessage('Seules les commandes en paiement effectué peuvent être modifiées.', 'warning')
         return
       }
 
-      if (previousState === 1 && nextState === 2) {
-        order.currentState = previousState
-        this.setStatusMessage('Le client n\'a pas encore commandé, vous ne pouvez pas commander à sa place.', 'warning')
+      if (!order?.id) {
+        this.setStatusMessage('Impossible de modifier une commande inexistante.', 'warning')
         return
       }
 
-      if (previousState === 1 && nextState === 3) {
-        order.currentState = previousState
-        this.setStatusMessage('Le retour de "dans le panier" vers "annulé" est interdit.', 'warning')
+      if (targetStateId !== 5 && targetStateId !== 6) {
+        this.setStatusMessage('État cible invalide.', 'danger')
         return
       }
 
-      if (previousState === 2 && nextState === 1) {
-        order.currentState = previousState
-        this.setStatusMessage('Le retour de "paiement effectué" vers "dans le panier" est interdit.', 'warning')
-        return
-      }
+      try {
+        if (targetStateId === 5) {
+          // Passage technique par "expédié" en arrière-plan avant de marquer la commande comme livrée.
+          await addOrderHistory(order.id, 4)
+          await addOrderHistory(order.id, 5)
 
-      if (previousState === 3 && nextState === 2) {
-        order.currentState = previousState
-        this.setStatusMessage('Le retour de "annulé" vers "paiement effectué" est interdit.', 'warning')
-        return
-      }
+          // Enregistrer le mouvement de stock pour chaque produit de la commande lors de sa livraison
+          try {
+            const orderDetail = await getOrderByIdCart(order.cartId)
+            if (orderDetail && orderDetail.associations && orderDetail.associations.order_rows) {
+              const rows = orderDetail.associations.order_rows
+              for (const row of rows) {
+                console.log(`[Commandes] Enregistrement mouvement stock (-${row.product_quantity}) pour produit ${row.product_id} (déclinaison: ${row.product_attribute_id || 0})`)
+                await createStockMovement(
+                  row.product_id,
+                  row.product_attribute_id || 0,
+                  -Number(row.product_quantity),
+                  order.id
+                )
+              }
+            }
+          } catch (errMvt) {
+            console.error('[Commandes] Erreur lors de l\'enregistrement des mouvements de stock lors de la livraison:', errMvt)
+          }
 
-      if (previousState === 2 && nextState === 3) {
-        if (!order.id) {
-          order.currentState = previousState
-          this.setStatusMessage('Impossible d\'annuler une commande inexistante.', 'warning')
+          order.currentState = 5
+          order.status = 'Livré'
+          this.setStatusMessage('Commande expédiée, livrée et mouvements de stock enregistrés.', 'success')
+          console.log(`Commande ${order.id} mise à jour via expédié (4) puis livré (5) et mouvements stock enregistrés`)
           return
         }
 
-        try {
-          await addOrderHistory(order.id, 6)
-          order._previousState = 3
-          order.currentState = 3
-          this.setStatusMessage('Commande annulée.', 'success')
-          console.log(`Commande ${order.id} annulée via order_histories (id_order_state=6)`)
-        } catch (error) {
-          order.currentState = previousState
-          this.setStatusMessage('Erreur lors de l\'annulation de la commande.', 'danger')
-          console.error('[Commandes] Erreur lors du changement d\'état:', error)
-        }
-        return
-      }
+        await addOrderHistory(order.id, targetStateId)
 
-      order._previousState = nextState
-      this.setStatusMessage('Statut mis à jour.', 'success')
-      console.log(`Commande ${order.id} - État mis à jour à: ${order.currentState}`)
+        order.currentState = 3
+        order.status = 'Annulé'
+        this.setStatusMessage('Commande annulée.', 'success')
+        console.log(`Commande ${order.id} annulée via order_histories (id_order_state=6)`)
+      } catch (error) {
+        this.setStatusMessage('Erreur lors de la mise à jour de la commande.', 'danger')
+        console.error('[Commandes] Erreur lors du changement d\'état:', error)
+      }
     },
     viewDetails(orderOrId) {
       const cartId = typeof orderOrId === 'object' ? orderOrId?.cartId : orderOrId

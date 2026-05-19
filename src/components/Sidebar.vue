@@ -38,6 +38,13 @@
         >
           Commandes
         </router-link>
+        <router-link 
+          to="/backoffice/modules/statistiques"
+          class="nav-link text-dark text-decoration-none ps-2 rounded mb-2"
+          :class="{ 'text-primary fw-bold': isActive('/backoffice/modules/statistiques') }"
+        >
+          Statistiques
+        </router-link>
       </div>
 
       <!-- Gestion de Données Section -->

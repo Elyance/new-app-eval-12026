@@ -201,20 +201,20 @@ export async function createOrder(orderData) {
               await addOrderHistory(createdOrderId, 2)
 
               // Enregistrer le mouvement de stock pour chaque produit de la commande
-              const rows = orderData.order_rows || []
-              for (const row of rows) {
-                try {
-                  console.log(`[orderService] Enregistrement mouvement stock (-${row.product_quantity}) pour produit ${row.product_id} (déclinaison: ${row.product_attribute_id || 0})`)
-                  await createStockMovement(
-                    row.product_id,
-                    row.product_attribute_id || 0,
-                    -row.product_quantity,
-                    createdOrderId
-                  )
-                } catch (errMvt) {
-                  console.error(`[orderService] Erreur lors de l'enregistrement du mouvement de stock pour le produit ${row.product_id}:`, errMvt)
-                }
-              }
+              // const rows = orderData.order_rows || []
+              // for (const row of rows) {
+              //   try {
+              //     console.log(`[orderService] Enregistrement mouvement stock (-${row.product_quantity}) pour produit ${row.product_id} (déclinaison: ${row.product_attribute_id || 0})`)
+              //     await createStockMovement(
+              //       row.product_id,
+              //       row.product_attribute_id || 0,
+              //       -row.product_quantity,
+              //       createdOrderId
+              //     )
+              //   } catch (errMvt) {
+              //     console.error(`[orderService] Erreur lors de l'enregistrement du mouvement de stock pour le produit ${row.product_id}:`, errMvt)
+              //   }
+              // }
 
               return {
                 id: createdOrderId,
@@ -245,8 +245,8 @@ export async function createOrder(orderData) {
     const createdOrderId = getXmlValue(createdOrder.id)
 
     // Ajouter la ligne d'historique de statut pour la commande et enregistrer les mouvements de stock
-    // if (createdOrderId) {
-    //   await addOrderHistory(createdOrderId, 2)
+    if (createdOrderId) {
+      await addOrderHistory(createdOrderId, 2)
 
     //   // Enregistrer le mouvement de stock pour chaque produit de la commande
     //   const rows = orderData.order_rows || []
@@ -263,7 +263,7 @@ export async function createOrder(orderData) {
     //       console.error(`[orderService] Erreur lors de l'enregistrement du mouvement de stock pour le produit ${row.product_id}:`, errMvt)
     //     }
     //   }
-    // }
+    }
     
     return {
       id: createdOrderId,

@@ -10,6 +10,9 @@
           <router-link to="/backoffice/modules/produits" class="btn btn-outline-primary btn-sm ms-2">
             Produits
           </router-link>
+          <router-link to="/backoffice/modules/statistiques" class="btn btn-outline-primary btn-sm ms-2">
+            Statistiques
+          </router-link>
         </div>
       </div>
       <div class="card border-0 shadow-sm">

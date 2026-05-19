@@ -15,6 +15,7 @@ import { cartStore } from '../../stores/cartStore'
 import { useOrderStore } from '../../stores/orderStore'
 import { authStore } from '../../stores/authStore'
 import { getCustomerAddresses, getAllCustomers } from '../../services/customerService'
+import { getStockAvailables } from '../../services/stockHelperService'
 import { getXmlString } from '../../utils/parsing'
 import { API_URL } from '../../constants/constant'
 import '../../styles/checkout.css'
@@ -28,6 +29,7 @@ const isSubmitting = ref(false)
 const cartItems = ref([])
 const countries = ref([])
 const carriers = ref([])
+const currentCartId = ref(null)
 
 // Form data
 const form = reactive({
@@ -78,7 +80,6 @@ onMounted(async () => {
  */
 const handleSelect = (customer) => {
   // Connecter localement le client sélectionné
-  authStore.logout()
   authStore.login(customer)
   selectedCustomerId.value = customer.id
 
@@ -109,6 +110,7 @@ const loadCheckoutData = async () => {
 
   try {
     const cartId = getIdCartInSessionStorage()
+    currentCartId.value = cartId || currentCartId.value
 
     if (!cartId) {
       router.push('/fo/panier')
@@ -257,7 +259,7 @@ const handleSubmitOrder = async () => {
   isSubmitting.value = true
 
   try {
-    const cartId = getIdCartInSessionStorage()
+    const cartId = getIdCartInSessionStorage() || currentCartId.value
     if (!cartId) {
       throw new Error('Panier introuvable')
     }
@@ -330,7 +332,26 @@ const handleSubmitOrder = async () => {
     const shippingFixed = Number(Number(shipping.value || 0).toFixed(2))
     const totalPaidFixed = Number((totalProductsFixed + shippingFixed).toFixed(2))
 
-    // 5. Créer la commande en envoyant des montants formatés (2 décimales)
+    // 5. Vérifier la disponibilité des produits avant création de la commande
+    for (const row of orderRows) {
+      try {
+        const stockList = await getStockAvailables(row.product_id)
+        const matching = Array.isArray(stockList) ? stockList.find(s => Number(s.id_product_attribute) === Number(row.product_attribute_id || 0)) : null
+        const availableQty = matching ? Number(matching.quantity || 0) : 0
+        if (availableQty < Number(row.product_quantity || 0)) {
+          alert(`Stock insuffisant pour ${row.product_name} (disponible: ${availableQty}, demandé: ${row.product_quantity})`)
+          isSubmitting.value = false
+          return
+        }
+      } catch (err) {
+        console.error('Impossible de vérifier le stock pour', row.product_id, err)
+        alert('Impossible de vérifier la disponibilité du stock. Réessayez plus tard.')
+        isSubmitting.value = false
+        return
+      }
+    }
+
+    // 6. Créer la commande en envoyant des montants formatés (2 décimales)
     const order = await createOrder({
       id_address_delivery: address.id,
       id_address_invoice: address.id,
@@ -440,7 +461,7 @@ const handleSubmitOrder = async () => {
       <div v-else class="checkout-content">
         <!-- Colonne Gauche: Formulaire -->
         <div>
-          <div class="selection-container">
+          <div v-if="!authStore.isLoggedIn && customers.length > 0" class="selection-container">
             <h2>Se connecter en tant que : </h2>
             <div class="customer-list">
               <div 

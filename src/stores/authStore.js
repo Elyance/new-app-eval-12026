@@ -28,6 +28,7 @@ export const authStore = reactive({
    */
   logout() {
     this.customer = null
+    sessionStorage.removeItem('id_cart') // Nettoie aussi le panier lié à la session
     sessionStorage.removeItem('customer')
   },
 

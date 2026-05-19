@@ -2,8 +2,8 @@ import { normalizeText, slugify, toNumber, round2, round6 } from '../utils/impor
 import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 import JSZip from 'jszip'
-import { updateStockInPrestashop } from './stockHelperService'
-import { createAddress, createOrder } from './orderService'
+import { updateStockInPrestashop, createStockMovement } from './stockHelperService'
+import { createAddress, createOrder, addOrderHistory } from './orderService'
 
 function convertDateToIso(dateStr) {
   if (!dateStr) return ''
@@ -905,9 +905,14 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
         continue
       }
 
-      // 6. Si paiement accepté -> Création de la commande correspondante
-      if (row.etat.toLowerCase() === 'paiement accepte' || row.etat.toLowerCase() === 'paiement accepté') {
-        console.log(`[Import Fichier 3] Conversion du panier ID ${cartId} en commande...`)
+      // 6. Si commande -> Création de la commande correspondante avec gestion des statuts
+      const etatLower = String(row.etat || '').toLowerCase().trim()
+      const isPaiementAccepte = etatLower === 'paiement accepte' || etatLower === 'paiement accepté'
+      const isLivre = etatLower === 'livre' || etatLower === 'livré'
+      const isAnnule = etatLower === 'annule' || etatLower === 'annulé'
+
+      if (isPaiementAccepte || isLivre || isAnnule) {
+        console.log(`[Import Fichier 3] Conversion du panier ID ${cartId} en commande (État cible: ${row.etat})...`)
         try {
           const order = await createOrder({
             id_address_delivery: address.id,
@@ -923,6 +928,29 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
           if (order && order.id) {
             results.ordersCreated++
             console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
+
+            if (isLivre) {
+              console.log(`[Import Fichier 3] Passage de la commande ID ${order.id} à l'état "Livré" (ID 5)...`)
+              await addOrderHistory(order.id, 5)
+
+              // Enregistrer le mouvement de stock pour chaque produit de la commande lors de sa livraison
+              for (const rowItem of orderRows) {
+                try {
+                  console.log(`[Import Fichier 3] Enregistrement mouvement stock (-${rowItem.product_quantity}) pour produit ${rowItem.product_id} (déclinaison: ${rowItem.product_attribute_id || 0})`)
+                  await createStockMovement(
+                    rowItem.product_id,
+                    rowItem.product_attribute_id || 0,
+                    -Number(rowItem.product_quantity),
+                    order.id
+                  )
+                } catch (errMvt) {
+                  console.error(`[Import Fichier 3] Erreur lors de l'enregistrement du mouvement de stock pour le produit ${rowItem.product_id}:`, errMvt)
+                }
+              }
+            } else if (isAnnule) {
+              console.log(`[Import Fichier 3] Passage de la commande ID ${order.id} à l'état "Annulé" (ID 6)...`)
+              await addOrderHistory(order.id, 6)
+            }
           } else {
             console.error(`[Import Fichier 3] Échec de la conversion du panier en commande pour "${row.email}"`)
             results.errors.push(`Erreur conversion commande pour ${row.email}`)

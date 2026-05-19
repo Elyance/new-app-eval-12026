@@ -191,45 +191,20 @@ export async function addProductToCart(cartId, productData) {
     if (existingRow) {
       // Produit existant -> PATCH pour modifier la quantité via query params
       const newQuantity = existingRow.quantity + Number(productData.quantity || 1)
-      const params = new URLSearchParams({
-        id_product: String(productData.id_product),
-        id_product_attribute: String(productData.id_product_attribute || 0),
-        quantity: String(newQuantity),
-        output_format: 'JSON',
-        display: 'full'
-      })
+      // Use the helper that builds and sends a PATCH with a valid XML body
+      const updated = await updateCartItemQuantity(
+        cartId,
+        productData.id_product,
+        productData.id_product_attribute || 0,
+        newQuantity
+      )
 
-      const url = `${API_URL}/carts/${cartId}?${params.toString()}`
-      const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
-        }
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Réponse erreur PrestaShop (PATCH):', errorText)
-        throw new Error(`Erreur API PrestaShop: ${response.status}`)
-      }
-
-      const ct = response.headers.get('content-type') || ''
-      let cartResult = null
-      if (ct.includes('application/json')) {
-        const jsonResp = await response.json()
-        cartResult = jsonResp?.cart || jsonResp?.prestashop?.cart || jsonResp
-      } else {
-        const text = await response.text()
-        const parsed = await xmlToJson(text)
-        cartResult = parsed?.prestashop?.cart || parsed?.cart || null
-      }
-
-      if (!cartResult) return null
+      if (!updated) return null
       return {
-        id: Number(cartResult.id || cartId),
-        id_customer: Number(cartResult.id_customer || 0),
-        id_currency: Number(cartResult.id_currency || 0),
-        id_lang: Number(cartResult.id_lang || 0)
+        id: Number(updated.id || cartId),
+        id_customer: Number(updated.id_customer || 0),
+        id_currency: Number(updated.id_currency || 0),
+        id_lang: Number(updated.id_lang || 0)
       }
     }
 
@@ -337,6 +312,9 @@ export async function updateCartItemQuantity(cartId, idProduct, idProductAttribu
       }
 
       const cartXML = jsonToXml(data, 'cart')
+
+      // Log du XML envoyé pour débogage (trace le corps de la requête PATCH)
+      console.log('XML envoyé pour mise à jour de la quantité (PATCH):', cartXML)
 
       response = await fetch(`${API_URL}/carts/${cartId}`, {
         method: 'PATCH',
