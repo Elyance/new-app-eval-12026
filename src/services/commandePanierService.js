@@ -234,10 +234,124 @@ export async function getFinalList() {
   return result
 }
 
+/**
+ * Retourne la liste paginée et optimisée prête pour le front: les paniers et
+ * commandes sont chargés en parallèle, triés par ID décroissant (plus récent d'abord).
+ */
+export async function getFinalListPaginated(page = 1, limit = 10) {
+  try {
+    const carts = await getCarts()
+    // Trier les paniers du plus récent au plus ancien
+    carts.sort((a, b) => b.id - a.id)
+
+    const total = carts.length
+    const startIndex = (page - 1) * limit
+    const paginatedCarts = carts.slice(startIndex, startIndex + limit)
+
+    const orders = await Promise.all(
+      paginatedCarts.map(async (cart) => {
+        try {
+          console.log('Traitement du panier ID:', cart.id)
+          const foundOrder = await getOrderByIdCart(cart.id)
+          const rawCustomerId = Number.isFinite(Number(cart.id_customer))
+            ? Number(cart.id_customer)
+            : Number(foundOrder?.id_customer || 0)
+
+          let customer = null
+          try {
+            customer = rawCustomerId !== 0 && Number.isFinite(rawCustomerId)
+              ? await getCustomerById(rawCustomerId)
+              : null
+          } catch (err) {
+            console.error(`Erreur customer pour panier ${cart.id}:`, err)
+          }
+          const customerName = customer ? `${customer.firstname || ''} ${customer.lastname || ''}`.trim() : ''
+
+          let carrier = null
+          try {
+            carrier = Number.isFinite(Number(foundOrder?.id_carrier)) && Number(foundOrder?.id_carrier) !== 0
+              ? await findCarrierById(Number(foundOrder.id_carrier))
+              : null
+          } catch (err) {
+            console.error(`Erreur carrier pour panier ${cart.id}:`, err)
+          }
+          const carrierName = carrier?.name || foundOrder?.id_carrier || ''
+
+          if (foundOrder) {
+            let stateName = 'Etat inconnu'
+            try {
+              stateName = (await getOrderStateById(foundOrder.current_state))?.name || 'Etat inconnu'
+            } catch (err) {
+              console.error(`Erreur orderState pour panier ${cart.id}:`, err)
+            }
+            return {
+              id: foundOrder.id,
+              cartId: cart.id,
+              reference: foundOrder.reference || '',
+              isNewCustomer: rawCustomerId === 0,
+              shipping: carrierName,
+              customer: customerName,
+              total: Number(foundOrder.total_paid || 0),
+              payment: foundOrder.payment || '',
+              currentState: toUiState(foundOrder.current_state),
+              status: stateName,
+              date: foundOrder.date_add || ''
+            }
+          } else {
+            let cartTotal = 0
+            try {
+              cartTotal = await calculateCartTotal(cart)
+            } catch (err) {
+              console.error(`Erreur total pour panier ${cart.id}:`, err)
+            }
+            return {
+              id: null,
+              cartId: cart.id,
+              reference: '',
+              isNewCustomer: rawCustomerId === 0,
+              shipping: carrierName,
+              customer: customerName,
+              total: cartTotal,
+              payment: '',
+              currentState: 1,
+              status: 'Dans le panier',
+              date: cart.date_add || ''
+            }
+          }
+        } catch (error) {
+          console.error(`Erreur traitement panier ${cart?.id}:`, error)
+          return {
+            id: null,
+            cartId: cart?.id || 0,
+            reference: '',
+            isNewCustomer: true,
+            shipping: '',
+            customer: '',
+            total: 0,
+            payment: '',
+            currentState: 1,
+            status: 'Erreur de chargement',
+            date: cart?.date_add || ''
+          }
+        }
+      })
+    )
+
+    return {
+      orders,
+      total
+    }
+  } catch (err) {
+    console.error('Erreur getFinalListPaginated:', err)
+    throw err
+  }
+}
+
 export default {
   getOrderByIdCart,
   hasOrder,
   getCommandeDetail,
   getFinalList,
+  getFinalListPaginated,
   calculateCartTotal
 }

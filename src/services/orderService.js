@@ -280,6 +280,44 @@ export async function createOrder(orderData) {
 }
 
 /**
+ * Met à jour les dates d'une commande existante dans PrestaShop.
+ * @param {number|string} id_order - ID de la commande
+ * @param {string} dateAdd - Date au format YYYY-MM-DD HH:mm:ss
+ * @returns {Promise<boolean>}
+ */
+export async function updateOrderDates(id_order, dateAdd) {
+  try {
+    const orderXML = jsonToXml({
+      id: id_order,
+      date_add: dateAdd,
+      date_upd: dateAdd
+    }, 'order')
+
+    console.log('XML envoyé pour mise à jour des dates de commande:', orderXML)
+
+    const response = await fetch(`${API_URL}/orders/${id_order}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      },
+      body: orderXML
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Réponse erreur PrestaShop (updateOrderDates):', errorText)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour des dates de commande:', error)
+    return false
+  }
+}
+
+/**
  * Ajoute un historique d'état à une commande
  * @param {number} id_order - ID de la commande
  * @param {number} id_order_state - ID du nouvel état

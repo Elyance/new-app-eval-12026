@@ -6,11 +6,13 @@
         <h2 class="mb-1 fw-bold">Statistiques & Rentabilité</h2>
         <p class="mb-0 text-white-50">Analyse détaillée du chiffre d'affaires, des coûts d'achat et des bénéfices par catégorie.</p>
       </div>
-      <button class="btn btn-light btn-refresh d-flex align-items-center gap-2 fw-semibold shadow-sm" @click="loadStats" :disabled="isLoading">
-        <span v-if="isLoading" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        <i v-else class="bi bi-arrow-clockwise"></i>
-        {{ isLoading ? 'Chargement...' : 'Actualiser' }}
-      </button>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-light btn-refresh d-flex align-items-center gap-2 fw-semibold shadow-sm" @click="loadStats" :disabled="isLoading">
+          <span v-if="isLoading" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          <i v-else class="bi bi-arrow-clockwise"></i>
+          {{ isLoading ? 'Chargement...' : 'Actualiser' }}
+        </button>
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -37,7 +39,7 @@
       <!-- KPI Widgets Grid -->
       <div class="row g-4 mb-4">
         <!-- Ventes HT -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
           <div class="card kpi-card border-0 shadow-sm rounded-3 overflow-hidden h-100">
             <div class="card-body p-4 position-relative">
               <div class="kpi-icon bg-primary-subtle text-primary mb-3 rounded-3 d-flex align-items-center justify-content-center">
@@ -53,7 +55,7 @@
         </div>
 
         <!-- Coût d'Achat HT -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
           <div class="card kpi-card border-0 shadow-sm rounded-3 overflow-hidden h-100">
             <div class="card-body p-4 position-relative">
               <div class="kpi-icon bg-danger-subtle text-danger mb-3 rounded-3 d-flex align-items-center justify-content-center">
@@ -69,7 +71,7 @@
         </div>
 
         <!-- Bénéfice Net HT -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
           <div class="card kpi-card border-0 shadow-sm rounded-3 overflow-hidden h-100">
             <div class="card-body p-4 position-relative">
               <div class="kpi-icon bg-success-subtle text-success mb-3 rounded-3 d-flex align-items-center justify-content-center">
@@ -81,22 +83,6 @@
               </h3>
               <div class="progress mt-3" style="height: 4px;">
                 <div class="progress-bar bg-success" role="progressbar" :style="{ width: profitRatio + '%' }" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Marge Globale -->
-        <div class="col-md-6 col-lg-3">
-          <div class="card kpi-card border-0 shadow-sm rounded-3 overflow-hidden h-100">
-            <div class="card-body p-4 position-relative">
-              <div class="kpi-icon bg-info-subtle text-info mb-3 rounded-3 d-flex align-items-center justify-content-center">
-                <i class="bi bi-percent fs-4"></i>
-              </div>
-              <h6 class="text-uppercase text-muted fw-bold mb-2">Taux de Marge</h6>
-              <h3 class="fw-bold mb-0 text-dark">{{ globalMargin }} %</h3>
-              <div class="progress mt-3" style="height: 4px;">
-                <div class="progress-bar bg-info" role="progressbar" :style="{ width: globalMargin + '%' }" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
               </div>
             </div>
           </div>
@@ -116,35 +102,18 @@
             <thead class="table-light-premium text-uppercase text-muted small">
               <tr>
                 <th class="ps-4 py-3">Catégorie</th>
-                <th class="py-3 text-end">Commandes</th>
                 <th class="py-3 text-end">Ventes (HT)</th>
                 <th class="py-3 text-end">Coût Achat (HT)</th>
-                <th class="py-3 text-end">Bénéfice</th>
-                <th class="py-3 text-end">Marge</th>
-                <th class="pe-4 py-3 text-end" style="width: 200px;">Part des ventes</th>
+                <th class="pe-4 py-3 text-end">Bénéfice</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="cat in categoriesStats" :key="cat.categoryName">
                 <td class="ps-4 py-3 fw-semibold text-dark">{{ cat.categoryName }}</td>
-                <td class="py-3 text-end text-muted">{{ cat.ordersCount }}</td>
                 <td class="py-3 text-end fw-semibold text-dark">{{ formatCurrency(cat.totalSalesHt) }}</td>
                 <td class="py-3 text-end text-muted">{{ formatCurrency(cat.totalPurchaseHt) }}</td>
-                <td class="py-3 text-end fw-bold" :class="cat.totalProfit >= 0 ? 'text-success' : 'text-danger'">
+                <td class="pe-4 py-3 text-end fw-bold" :class="cat.totalProfit >= 0 ? 'text-success' : 'text-danger'">
                   {{ formatCurrency(cat.totalProfit) }}
-                </td>
-                <td class="py-3 text-end">
-                  <span class="badge fw-semibold px-2.5 py-1.5" :class="getMarginBadgeClass(calculateMargin(cat))">
-                    {{ calculateMargin(cat) }} %
-                  </span>
-                </td>
-                <td class="pe-4 py-3">
-                  <div class="d-flex align-items-center justify-content-end gap-3">
-                    <span class="small fw-medium text-muted">{{ getSalesPercentage(cat.totalSalesHt) }}%</span>
-                    <div class="progress w-100" style="height: 6px; max-width: 100px;">
-                      <div class="progress-bar bg-primary rounded-pill" role="progressbar" :style="{ width: getSalesPercentage(cat.totalSalesHt) + '%' }"></div>
-                    </div>
-                  </div>
                 </td>
               </tr>
             </tbody>

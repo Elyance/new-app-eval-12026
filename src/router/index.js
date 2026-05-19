@@ -18,6 +18,7 @@ import CommandeDetail from '@/views/BO/Modules/CommandeDetail.vue'
 import TableauBord from '@/views/BO/Modules/TableauBord.vue'
 import Produits from '@/views/BO/Modules/Produits.vue'
 import Statistiques from '@/views/BO/Modules/Statistiques.vue'
+import StatistiquesProduits from '@/views/BO/Modules/StatistiquesProduits.vue'
 import Login from '@/components/Auth/Login.vue'
 import { setupRouterGuards } from '@/middleware/authGuard'
 
@@ -78,6 +79,15 @@ const routes = [
         meta: {
           title: 'Statistiques',
           description: 'Consultez les statistiques des ventes et bénéfices.'
+        }
+      },
+      {
+        path: 'statistiques-produits',
+        name: 'StatistiquesProduits',
+        component: StatistiquesProduits,
+        meta: {
+          title: 'Statistiques Produits',
+          description: 'Consultez les statistiques détaillées des ventes et bénéfices par produit.'
         }
       },
       {

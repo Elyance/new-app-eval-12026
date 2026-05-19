@@ -12,7 +12,7 @@
     </div>
     
     <div class="table-responsive">
-      <table class="table table-striped table-hover">
+      <table class="table table-striped table-hover align-middle">
         <thead class="table-dark">
           <tr>
             <th>ID</th>
@@ -29,22 +29,26 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="order in orders" :key="order.id">
-            <td>{{ order.id }}</td>
+          <tr v-for="order in orders" :key="order.id || order.cartId">
+            <td>{{ order.id || '-' }}</td>
             <td>{{ order.cartId }}</td>
-            <td>{{ order.reference }}</td>
-            <td>{{ order.isNewCustomer ? 'Oui' : 'Non' }}</td>
-            <td>{{ order.shipping }}</td>
+            <td><code class="text-secondary fw-semibold">{{ order.reference || '-' }}</code></td>
+            <td>
+              <span :class="['badge', order.isNewCustomer ? 'bg-info text-dark' : 'bg-light text-secondary']">
+                {{ order.isNewCustomer ? 'Oui' : 'Non' }}
+              </span>
+            </td>
+            <td>{{ order.shipping || '-' }}</td>
             <td>{{ order.customer || '-' }}</td>
-            <td class="fw-bold">{{ formatCurrency(order.total) }}</td>
-            <td>{{ order.payment || '-' }}</td>
+            <td class="fw-bold text-primary">{{ formatCurrency(order.total) }}</td>
+            <td><span class="small text-muted">{{ order.payment || '-' }}</span></td>
             <td>
               <span class="badge" :class="getStatusBadgeClass(order)">{{ order.status || 'Etat inconnu' }}</span>
             </td>
             <td>{{ formatDate(order.date) }}</td>
             <td>
               <div class="d-flex flex-wrap gap-2">
-                <button class="btn btn-sm btn-info" @click="viewDetails(order)">Détails</button>
+                <button class="btn btn-sm btn-info text-white" @click="viewDetails(order)">Détails</button>
 
                 <template v-if="order.currentState === 2">
                   <button class="btn btn-sm btn-outline-danger" @click="changeOrderState(order, 6)">
@@ -61,7 +65,9 @@
       </table>
     </div>
 
-    <div v-if="isLoading" class="alert alert-info mt-4">
+    <!-- Info messages (loading, error, empty) -->
+    <div v-if="isLoading" class="alert alert-info mt-4 d-flex align-items-center gap-2">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
       Chargement des commandes...
     </div>
 
@@ -72,11 +78,52 @@
     <div v-else-if="orders.length === 0" class="alert alert-info mt-4">
       Aucune commande trouvée.
     </div>
+
+    <!-- Pagination & Limits Controls -->
+    <div v-if="!isLoading && !loadError && orders.length > 0" class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-4 pagination-bar">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="text-muted small">
+          Affichage de <strong>{{ startEntry }}</strong> à <strong>{{ endEntry }}</strong> sur <strong>{{ totalOrders }}</strong> commandes
+        </span>
+        <div class="d-flex align-items-center gap-2 limit-selector">
+          <span class="text-muted small text-nowrap">Afficher</span>
+          <select v-model="limit" class="form-select form-select-sm limit-dropdown" @change="resetAndFetch">
+            <option :value="5">5</option>
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+          </select>
+          <span class="text-muted small text-nowrap">par page</span>
+        </div>
+      </div>
+      
+      <nav aria-label="Page navigation">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item" :class="{ disabled: currentPage === 1 }">
+            <button class="page-link prev-next-btn" @click="changePage(currentPage - 1)" aria-label="Précédent">
+              <span aria-hidden="true">&laquo;</span>
+            </button>
+          </li>
+          
+          <li v-for="(page, idx) in visiblePages" :key="idx" class="page-item" :class="{ active: currentPage === page, disabled: page === '...' }">
+            <button class="page-link page-num-btn" @click="changePage(page)">
+              {{ page }}
+            </button>
+          </li>
+          
+          <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+            <button class="page-link prev-next-btn" @click="changePage(currentPage + 1)" aria-label="Suivant">
+              <span aria-hidden="true">&raquo;</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
   </div>
 </template>
 
 <script>
-import { getFinalList, getOrderByIdCart } from '@/services/commandePanierService'
+import { getFinalListPaginated, getOrderByIdCart } from '@/services/commandePanierService'
 import { addOrderHistory } from '@/services/orderService'
 import { createStockMovement } from '@/services/stockHelperService'
 
@@ -88,27 +135,80 @@ export default {
       isLoading: false,
       loadError: '',
       statusMessage: '',
-      statusMessageType: 'info'
+      statusMessageType: 'info',
+      currentPage: 1,
+      limit: 10,
+      totalOrders: 0
+    }
+  },
+  computed: {
+    totalPages() {
+      return Math.ceil(this.totalOrders / this.limit) || 1
+    },
+    startEntry() {
+      if (this.totalOrders === 0) return 0
+      return (this.currentPage - 1) * this.limit + 1
+    },
+    endEntry() {
+      const value = this.currentPage * this.limit
+      return value > this.totalOrders ? this.totalOrders : value
+    },
+    visiblePages() {
+      const total = this.totalPages
+      const current = this.currentPage
+      const delta = 2
+      const range = []
+
+      for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+        range.push(i)
+      }
+
+      if (current - delta > 2) {
+        range.unshift('...')
+      }
+      range.unshift(1)
+
+      if (current + delta < total - 1) {
+        range.push('...')
+      }
+      if (total > 1) {
+        range.push(total)
+      }
+
+      return range
     }
   },
   async mounted() {
-    try {
-      this.isLoading = true
-      const finalList = await getFinalList()
-      this.orders = finalList
-      this.orders.forEach((order) => {
-        order._previousState = Number(order.currentState || 1)
-      })
-    //   console.log('[Commandes] getFinalList() return:', finalList)
-    //   console.log('[Commandes] JSON preview:', JSON.stringify(finalList, null, 2))
-    } catch (error) {
-      this.loadError = 'Impossible de charger les commandes'
-      console.error('[Commandes] Error while calling getFinalList():', error)
-    } finally {
-      this.isLoading = false
-    }
+    await this.fetchOrders()
   },
   methods: {
+    async fetchOrders() {
+      try {
+        this.isLoading = true
+        this.loadError = ''
+        const { orders, total } = await getFinalListPaginated(this.currentPage, this.limit)
+        this.orders = orders
+        this.totalOrders = total
+        this.orders.forEach((order) => {
+          order._previousState = Number(order.currentState || 1)
+        })
+      } catch (error) {
+        this.loadError = 'Impossible de charger les commandes'
+        console.error('[Commandes] Error while calling getFinalListPaginated():', error)
+      } finally {
+        this.isLoading = false
+      }
+    },
+    changePage(page) {
+      if (page === '...') return
+      if (page < 1 || page > this.totalPages) return
+      this.currentPage = page
+      this.fetchOrders()
+    },
+    resetAndFetch() {
+      this.currentPage = 1
+      this.fetchOrders()
+    },
     formatCurrency(value) {
       return new Intl.NumberFormat('fr-FR', {
         style: 'currency',
@@ -117,7 +217,13 @@ export default {
     },
     formatDate(dateString) {
       if (!dateString) return '-'
-      return new Date(dateString).toLocaleDateString('fr-FR');
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     },
     getStatusBadgeClass(order) {
       const state = Number(order?.currentState || 0)
@@ -130,6 +236,12 @@ export default {
     setStatusMessage(message, type = 'info') {
       this.statusMessage = message
       this.statusMessageType = type
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        if (this.statusMessage === message) {
+          this.statusMessage = ''
+        }
+      }, 5000)
     },
     async changeOrderState(order, targetStateId) {
       const currentState = Number(order?.currentState || 0)
@@ -151,11 +263,9 @@ export default {
 
       try {
         if (targetStateId === 5) {
-          // Passage technique par "expédié" en arrière-plan avant de marquer la commande comme livrée.
           await addOrderHistory(order.id, 4)
           await addOrderHistory(order.id, 5)
 
-          // Enregistrer le mouvement de stock pour chaque produit de la commande lors de sa livraison
           try {
             const orderDetail = await getOrderByIdCart(order.cartId)
             if (orderDetail && orderDetail.associations && orderDetail.associations.order_rows) {
@@ -177,7 +287,6 @@ export default {
           order.currentState = 5
           order.status = 'Livré'
           this.setStatusMessage('Commande expédiée, livrée et mouvements de stock enregistrés.', 'success')
-          console.log(`Commande ${order.id} mise à jour via expédié (4) puis livré (5) et mouvements stock enregistrés`)
           return
         }
 
@@ -186,7 +295,6 @@ export default {
         order.currentState = 3
         order.status = 'Annulé'
         this.setStatusMessage('Commande annulée.', 'success')
-        console.log(`Commande ${order.id} annulée via order_histories (id_order_state=6)`)
       } catch (error) {
         this.setStatusMessage('Erreur lors de la mise à jour de la commande.', 'danger')
         console.error('[Commandes] Erreur lors du changement d\'état:', error)
@@ -211,25 +319,126 @@ export default {
 .commandes-container {
   padding: 2rem;
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 h2 {
-  color: #333;
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 1rem;
+  color: #2c3e50;
+  font-weight: 700;
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50px;
+  height: 4px;
+  background: linear-gradient(90deg, #007bff, #00d2ff);
+  border-radius: 2px;
+}
+
+.table-responsive {
+  margin-top: 1.5rem;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.02);
 }
 
 .table {
-  margin-top: 1.5rem;
+  margin-bottom: 0;
 }
 
-.form-select-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
+.table thead {
+  background-color: #2c3e50;
+}
+
+.table th {
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border: none;
+}
+
+.table td {
+  font-size: 0.9rem;
+  color: #495057;
+  padding: 1rem 0.75rem;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.table tbody tr:hover {
+  background-color: #f8f9fa !important;
+}
+
+.badge {
+  padding: 0.5em 0.8em;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.pagination-bar {
+  border-top: 1px solid #dee2e6;
+  padding-top: 1.5rem;
+}
+
+.limit-selector {
+  border-left: 1px solid #dee2e6;
+  padding-left: 1rem;
+}
+
+.limit-dropdown {
+  width: auto;
+  border-radius: 6px;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.pagination .page-link {
+  color: #007bff;
+  border: 1px solid #dee2e6;
+  padding: 0.375rem 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+.pagination .page-link:hover {
+  background-color: #e9ecef;
+  border-color: #dee2e6;
+  color: #0056b3;
+}
+
+.pagination .page-item.active .page-link {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border-color: #007bff;
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 123, 255, 0.25);
+}
+
+.pagination .page-item.disabled .page-link {
+  color: #6c757d;
+  background-color: #fff;
+  border-color: #dee2e6;
 }
 
 .btn-sm {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.btn-info {
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+}
+
+.btn-info:hover {
+  background-color: #138496;
+  border-color: #117a8b;
 }
 </style>

@@ -3,7 +3,8 @@ import { jsonToXml, xmlToJson } from '../utils/xmlParser'
 import { API_URL, API_KEY } from '../constants/constant'
 import JSZip from 'jszip'
 import { updateStockInPrestashop, createStockMovement } from './stockHelperService'
-import { createAddress, createOrder, addOrderHistory } from './orderService'
+import { createAddress, createOrder, updateOrderDates, addOrderHistory } from './orderService'
+import { cartStore } from '@/stores/cartStore'
 
 function convertDateToIso(dateStr) {
   if (!dateStr) return ''
@@ -664,6 +665,7 @@ async function createImportCart(cartData, authHeader) {
       id_customer: cartData.id_customer,
       id_address_delivery: cartData.id_address_delivery,
       id_address_invoice: cartData.id_address_invoice,
+      date_add: cartData.date_add,
       associations: {
         cart_rows: {
           cart_row: cartData.cart_rows
@@ -851,6 +853,7 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
       const cartRows = []
       const orderRows = []
       let totalPaidTtc = 0
+      const importDateAdd = `${convertDateToIso(row.date)} 12:00:00`
 
       for (const item of row.achat) {
         const resolved = await resolveProductAndCombination(item.reference, item.specificite_valeur, planFinal, authHeader)
@@ -891,7 +894,8 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
         id_customer: customer.id,
         id_address_delivery: address.id,
         id_address_invoice: address.id,
-        cart_rows: cartRows
+        cart_rows: cartRows,
+        date_add: importDateAdd
       }, authHeader)
 
       if (!cartId) {
@@ -922,12 +926,17 @@ export async function executeFichier3Import(rowsFichier3, planFinal) {
             total_paid: totalPaidTtc,
             secure_key: customer.secure_key,
             order_rows: orderRows,
-            date_add: convertDateToIso(row.date) + ' 12:00:00'
+            date_add: importDateAdd
           })
 
           if (order && order.id) {
             results.ordersCreated++
             console.log(`[Import Fichier 3] Commande créée avec succès ID : ${order.id}`)
+
+            const orderDatesUpdated = await updateOrderDates(order.id, importDateAdd)
+            if (!orderDatesUpdated) {
+              console.warn(`[Import Fichier 3] Impossible de mettre à jour la date_add/date_upd de la commande ID ${order.id}`)
+            }
 
             if (isLivre) {
               console.log(`[Import Fichier 3] Passage de la commande ID ${order.id} à l'état "Livré" (ID 5)...`)
