@@ -25,6 +25,12 @@
           <input type="file" class="form-control" ref="images" accept=".zip,application/zip" />
         </div>
 
+
+        <div class="mb-3">
+          <input type="checkbox" id="image" value="image" />
+          <label for="image">Ne pas afficher</label>
+        </div>
+
         <button class="btn btn-primary" :disabled="isSubmitting">Importer</button>
       </form>
 
@@ -47,6 +53,7 @@ export default {
   name: 'ImportStatic',
   data() {
     return {
+      // imageOrNot: true,
       isSubmitting: false,
       message: '',
       success: false,
@@ -55,8 +62,18 @@ export default {
   },
   methods: {
     async handleSubmit() {
+      const checkbox = document.getElementById(image);
+      if (checkbox && checkbox.checked) {
+        console.log("Pas besoin d'images")
+      }
+
+      // console.log("checkbox ", imageOrNot)
       const csvFiles = [this.$refs.f1?.files?.[0], this.$refs.f2?.files?.[0], this.$refs.f3?.files?.[0]].filter(Boolean)
-      const zipFile = this.$refs.images?.files?.[0] || null
+      const zipFile = null
+      if (checkbox && checkbox.checked) {
+        zipFile = this.$refs.images?.files?.[0]
+      }
+      // const zipFile =  || null
       console.log('[ImportStatic] Soumission reçue', {
         csvNames: csvFiles.map(file => file?.name || ''),
         zipName: zipFile?.name || ''
@@ -68,7 +85,7 @@ export default {
       this.message = 'Initialisation de l\'importation...'
 
       try {
-        const summary = await runFullImportPipeline({ csvFiles, zipFile }, (stepMessage) => {
+        const summary = await runFullImportPipeline({ csvFiles, zipFile , }, (stepMessage) => {
           console.log('[ImportStatic] Progrès :', stepMessage)
           this.message = stepMessage
         })

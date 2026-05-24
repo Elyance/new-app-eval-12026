@@ -25,6 +25,26 @@ function createEmptyDayBucket(date) {
   }
 }
 
+function parseMoneyValue(value, fallback = 0) {
+  if (value === null || value === undefined || value === '') return fallback
+
+  const rawValue = typeof value === 'object' ? getXmlString(value) : String(value)
+  const normalized = rawValue
+    .replace(/\s+/g, '')
+    .replace(',', '.')
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function moneyToCents(value) {
+  return Math.round(parseMoneyValue(value, 0) * 100)
+}
+
+function centsToMoney(valueInCents) {
+  return Number((valueInCents / 100).toFixed(2))
+}
+
 async function parseOrdersResponse(xmlData) {
   const jsonData = await xmlToJson(xmlData)
   const ordersNode = jsonData?.prestashop?.orders?.order || []
@@ -35,7 +55,8 @@ async function parseOrdersResponse(xmlData) {
     reference: getXmlString(order.reference),
     current_state: getXmlValue(order.current_state),
     payment: getXmlString(order.payment),
-    total_paid: Number(getXmlValue(order.total_paid) || 0),
+    total_paid: parseMoneyValue(order.total_paid, 0),
+    total_paid_cents: moneyToCents(order.total_paid),
     date_add: getXmlString(order.date_add),
     date_key: extractDateKey(order.date_add)
   }))
@@ -101,12 +122,12 @@ export async function getDataForTB() {
     const orders = await getOrders()
 
     const dailyBucketMap = new Map()
-    let totalMontant = 0
+    let totalMontantCents = 0
     let totalCommande = 0
 
     for (const order of orders) {
       totalCommande += 1
-      totalMontant += Number(order.total_paid || 0)
+      totalMontantCents += Number(order.total_paid_cents || moneyToCents(order.total_paid))
 
       const bucketKey = order.date_key || 'unknown'
       if (!dailyBucketMap.has(bucketKey)) {
@@ -115,20 +136,35 @@ export async function getDataForTB() {
 
       const bucket = dailyBucketMap.get(bucketKey)
       bucket.nbCommande += 1
-      bucket.montant += Number(order.total_paid || 0)
+      bucket.montant += Number(order.total_paid_cents || moneyToCents(order.total_paid))
       bucket.orders.push(order)
     }
 
     const dailyStats = Array.from(dailyBucketMap.values())
       .sort((left, right) => String(left.date).localeCompare(String(right.date)))
+      .map((bucket) => ({
+        ...bucket,
+        montant: centsToMoney(bucket.montant)
+      }))
+
+    const totalGeneral = {
+      nbCommande: totalCommande,
+      montant: centsToMoney(totalMontantCents)
+    }
+
+    console.groupCollapsed('[commandeTBService] Résumé tableau de bord commandes')
+    console.table(dailyStats.map((row) => ({
+      date: row.date,
+      nbCommande: row.nbCommande,
+      montant_eur: row.montant
+    })))
+    console.table([totalGeneral])
+    console.groupEnd()
 
     return {
       orders,
       dailyStats,
-      totalGeneral: {
-        nbCommande: totalCommande,
-        montant: totalMontant
-      }
+      totalGeneral
     }
   } catch (error) {
     console.error('Erreur dans getDataForTB:', error)

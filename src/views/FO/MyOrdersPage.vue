@@ -59,6 +59,7 @@ onMounted(async () => {
               <th>Statut</th>
               <th>Produits</th>
               <th class="text-end">Total payé</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -74,6 +75,11 @@ onMounted(async () => {
                 <span v-else>-</span>
               </td>
               <td class="text-end">{{ Number(order.total_paid).toFixed(2) }} €</td>
+              <td>
+                  <router-link to="/fo/dupliquer" class="btn btn-outline-primary btn-sm">
+                    Dupliquer
+                  </router-link>
+              </td>
             </tr>
           </tbody>
         </table>

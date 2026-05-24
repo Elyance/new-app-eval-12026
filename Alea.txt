@@ -1,0 +1,7 @@
+ALEA 1
+Case a cocher pour choisir si on veux telecharger l'image : tsy cocher
+
+ALEA 2
+Etats de mes commandes en tant que client -> CREER UNE NOUVELLE COMMANDE ASINA BOUTON EO AMLE LIGNE
+DUPLIQUER : par defaut 1, de raha 2 na 3 na 4 de lasa fois anzay le quantite
+VALIDER: Ecran 1 : AMPY SA TSY AMPY LE STOCK POUR CES COMMANDES -> Annuler ou VALIDER(->livre) tsy afaka validena raha tsy ampy daholo izy rehetra

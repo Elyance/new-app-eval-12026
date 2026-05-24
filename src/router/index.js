@@ -21,6 +21,7 @@ import Statistiques from '@/views/BO/Modules/Statistiques.vue'
 import StatistiquesProduits from '@/views/BO/Modules/StatistiquesProduits.vue'
 import Login from '@/components/Auth/Login.vue'
 import { setupRouterGuards } from '@/middleware/authGuard'
+import Duplication from '../views/FO/Duplication.vue'
 
 const routes = [
   {
@@ -166,6 +167,12 @@ const routes = [
     path: '/fo/commande',
     name: 'Checkout',
     component: CheckoutPage,
+    meta: { hideSidebar: true }
+  },
+  {
+    path: '/fo/dupliquer',
+    name: 'Duplication de commande',
+    component: Duplication,
     meta: { hideSidebar: true }
   },
   {

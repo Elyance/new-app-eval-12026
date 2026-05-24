@@ -41,9 +41,9 @@ export async function validateImportFiles({ csvFiles = [], zipFile = null } = {}
   if (normalizedCsvFiles.length !== 3) {
     errors.push(`Il faut exactement 3 fichiers CSV, reçu(s): ${normalizedCsvFiles.length}.`)
   }
-  if (!zipFile) {
-    errors.push('Le fichier ZIP contenant les images est obligatoire.')
-  }
+  // if (!zipFile) {
+  //   errors.push('Le fichier ZIP contenant les images est obligatoire.')
+  // }
 
   const fileValidationErrors = await validateFiles({
     csv1: normalizedCsvFiles[0],
