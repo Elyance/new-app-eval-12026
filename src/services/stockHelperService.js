@@ -195,6 +195,76 @@ export async function updateStockInPrestashop(productId, combinationId = 0, delt
   }
 }
 
+export async function removeProductFromStock(productId, combinationId = 0, deltaQuantity) {
+  try {
+    console.log("DANS LA FOCNTION DANS LA FONCTION", deltaQuantity)
+    const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+
+    // // 1. Appeler createStockMovement pour insérer le mouvement ET récupérer le stock_available existant
+     const stockAvailable = await getStockAvailable(productId)
+     console.log("STOCK STOCK STOCK : ", stockAvailable)
+    if (!stockAvailable) {
+      console.warn(`Stock available non trouve`)
+      return false
+    }
+
+    const extractValue = (obj) => typeof obj === 'object' && obj !== null ? (obj['#text'] || '') : obj;
+    const id_stock_available = stockAvailable[0].id
+    const currentQuantity = parseInt(extractValue(stockAvailable[0].quantity) || 0)
+    const id_shop = extractValue(stockAvailable[0].id_shop) || 1
+    const id_shop_group = extractValue(stockAvailable[0].id_shop_group) || 0
+    const out_of_stock = extractValue(stockAvailable[0].out_of_stock) || 2
+    const depends_on_stock = extractValue(stockAvailable[0].depends_on_stock) || 0
+    const location = extractValue(stockAvailable[0].location) || ''
+
+    let newQuantity = currentQuantity - parseInt(deltaQuantity)
+    if (newQuantity < 0) {
+      newQuantity = 0
+    }
+    console.log("AAAAAAAAAAAAAAAAAA", currentQuantity, deltaQuantity)
+    // 2. Mettre à jour stock_available (PUT)
+    const availPayload = {
+      // id: id_stock_available,
+      id: id_stock_available,
+      id_product: productId,
+      id_product_attribute: combinationId || 0,
+      id_shop: id_shop,
+      id_shop_group: id_shop_group,
+      quantity: newQuantity,
+      depends_on_stock: depends_on_stock,
+      out_of_stock: out_of_stock,
+      location: location
+    }
+    console.log("AVAIL JSON: ", availPayload)
+
+
+    const availXml = jsonToXml(availPayload, 'stock_available')
+    console.log("AVAIL XML: ", availXml)
+
+
+    const availResponse = await fetch(`${API_URL}/stock_availables/${id_stock_available}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/xml',
+        ...authHeader
+      },
+      body: availXml
+    })
+
+    if (!availResponse.ok) {
+      console.error("Erreur update stock_available:", await availResponse.text())
+      return false
+    }
+
+    console.log(`Stock mis à jour avec succès : id_stock_available=${id_stock_available}, old_qty=${currentQuantity}, new_qty=${newQuantity}`)
+    return true
+  } catch (err) {
+    console.error("Erreur dans updateStockInPrestashop:", err)
+    return false
+  }
+}
+
+
 export async function getStockAvailables(productId) {
   try {
     const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
@@ -221,6 +291,29 @@ export async function getStockAvailables(productId) {
         quantity: Number(extractValue(s.quantity) || 0)
       }))
       .filter(s => s.id > 0)
+  } catch (err) {
+    console.error("Erreur lors de la recuperation des stocks availables:", err)
+    return []
+  }
+}
+
+export async function getStockAvailable(productId) {
+  try {
+    const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}` }
+    
+    // 1. Récupérer tous les stock_availables pour ce produit
+    const urlStock = `${API_URL}/stock_availables?filter[id_product]=${productId}&filter[id_product_attribute]=0&display=full`
+    const resStock = await fetch(urlStock, { headers: authHeader })
+    if (!resStock.ok) return []
+    
+    const xmlStock = await resStock.text()
+    const jsonStock = await xmlToJson(xmlStock)
+    const stockNodes = jsonStock?.prestashop?.stock_availables?.stock_available || []
+    console.log("stock_availables raw", jsonStock)
+    const stockArray = Array.isArray(stockNodes) ? stockNodes : [stockNodes]
+    console.log("stockArray raw", stockArray)
+        
+    return stockArray
   } catch (err) {
     console.error("Erreur lors de la recuperation des stocks availables:", err)
     return []

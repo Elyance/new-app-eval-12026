@@ -1,0 +1,10 @@
+remove stock, front office
+formulaire mampiditra nombre
+misy categorie (select)
+valider
+
+mihena qtt daholo ny stock anle categorie 
+si <0 -> 0
+
+
+TOTAL REALISE (nb de reussite)

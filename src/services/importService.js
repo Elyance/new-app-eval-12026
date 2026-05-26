@@ -14,15 +14,15 @@ import { getModules } from './ModulesService'
 
 /*
  * importService.js
- * - Valide la présence et le type des fichiers (3 CSV + ZIP) via `useFileValidator`
+ * - Valide la présence et le type des fichiers (3 CSV + ZIP optionnel) via `useFileValidator`
  * - Parse les CSV avec PapaParse (header: true)
  * - Orchestre l'importation complète via le pipeline runFullImportPipeline avec rollback transactionnel
  *
  * Fonctions principales exposées:
- *  - validateImportFiles({ csvFiles, zipFile }) -> { valid, errors, files }
+ *  - validateImportFiles({ csvFiles, zipFile, skipImages }) -> { valid, errors, files }
  *  - parseCsvFile(file) -> Promise<rows>
  *  - parseCsvFiles(files) -> Promise< [{fileName, rows}] >
- *  - runFullImportPipeline({ csvFiles, zipFile }, onProgress) -> Promise<summary>
+ *  - runFullImportPipeline({ csvFiles, zipFile, skipImages }, onProgress) -> Promise<summary>
  */
 
 const { validateFiles } = useFileValidator()
@@ -34,14 +34,14 @@ function normalizeFileList(files) {
 }
 
 // Valide la présence des 3 CSV et du ZIP, puis délègue la vérification binaire
-export async function validateImportFiles({ csvFiles = [], zipFile = null } = {}) {
+export async function validateImportFiles({ csvFiles = [], zipFile = null, skipImages = false } = {}) {
   const normalizedCsvFiles = normalizeFileList(csvFiles)
   const errors = []
 
   if (normalizedCsvFiles.length !== 3) {
     errors.push(`Il faut exactement 3 fichiers CSV, reçu(s): ${normalizedCsvFiles.length}.`)
   }
-  if (!zipFile) {
+  if (!zipFile && !skipImages) {
     errors.push('Le fichier ZIP contenant les images est obligatoire.')
   }
 
@@ -118,10 +118,10 @@ export function getImportFileSummary({ csvFiles = [], zipFile = null } = {}) {
 }
 
 // Orchestre le pipeline complet d'importation
-export async function runFullImportPipeline({ csvFiles = [], zipFile = null }, onProgress = () => {}) {
+export async function runFullImportPipeline({ csvFiles = [], zipFile = null, skipImages = false }, onProgress = () => {}) {
   // 1) Validation des fichiers
   onProgress('Validation des fichiers en cours...')
-  const validation = await validateImportFiles({ csvFiles, zipFile })
+  const validation = await validateImportFiles({ csvFiles, zipFile, skipImages })
   if (!validation.valid) {
     throw new Error(validation.errors.join(' | '))
   }
@@ -149,10 +149,12 @@ export async function runFullImportPipeline({ csvFiles = [], zipFile = null }, o
     onProgress('Insertion des nouveaux Produits dans PrestaShop...')
     const planFinal = await insertProducts(planEnrichi)
 
-    // 4) Upload des images si le ZIP est présent
-    if (validation.files.zipFile) {
+    // 4) Upload des images si le ZIP est présent ET skipImages est false
+    if (validation.files.zipFile && !skipImages) {
       onProgress('Extraction et envoi des images produits...')
       await uploadProductImages(validation.files.zipFile, planFinal)
+    } else if (skipImages) {
+      onProgress('Import des images ignoré (option cochée)...')
     }
 
     // 5) Traitement et importation du Fichier 2

@@ -107,13 +107,13 @@ export async function getCart(cartId) {
  * @param {Object} productData - { id_product, id_product_attribute, quantity }
  * @returns {Object|null} Le panier créé avec son ID
  */
-export async function createCart(productData) {
+export async function createCart(productData, customerId = 0) {
   try {
     // jsonToXml wraps data inside { prestashop: { [moduleName]: data } }
     // so we only pass the cart content here
     const cartData = {
       id_currency: 1,
-      id_customer: 0,
+      id_customer: customerId,
       id_lang: 1,
       associations: {
         cart_rows: {

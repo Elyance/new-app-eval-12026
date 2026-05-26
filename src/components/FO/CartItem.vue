@@ -15,11 +15,11 @@ const subtotal = computed(() => {
 })
 
 const handleRemove = () => {
-  emit('remove', props.item.id)
+  emit('remove', props.item.id, props.item.id_product_attribute)
 }
 
 const handleQuantityChange = (newQuantity) => {
-  emit('update-quantity', props.item.id, newQuantity)
+  emit('update-quantity', props.item.id, props.item.id_product_attribute, newQuantity)
 }
 
 const decreaseQuantity = () => {

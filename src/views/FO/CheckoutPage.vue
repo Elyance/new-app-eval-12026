@@ -134,7 +134,10 @@ const loadCheckoutData = async () => {
       cart.rows.map(async (row) => {
         try {
           const product = await getProductDetail(row.id_product)
-          const pricing = getProductPricingDisplay(product)
+          const combination = row.id_product_attribute 
+            ? product.combinations?.find(c => c.id == row.id_product_attribute)
+            : null
+          const pricing = getProductPricingDisplay(product, combination)
 
           return {
             id: row.id_product,
@@ -142,8 +145,8 @@ const loadCheckoutData = async () => {
             name: product?.name || `Produit #${row.id_product}`,
             price: pricing.finalPrice,
             quantity: row.quantity,
-            image: product?.image || '',
-            reference: product?.reference || ''
+            image: combination?.image || product?.image || '',
+            reference: combination?.reference || product?.reference || ''
           }
         } catch (err) {
           console.error(`Erreur chargement produit ${row.id_product}:`, err)

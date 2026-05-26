@@ -25,6 +25,18 @@
           <input type="file" class="form-control" ref="images" accept=".zip,application/zip" />
         </div>
 
+        <div class="mb-3 form-check">
+          <input 
+            type="checkbox" 
+            class="form-check-input" 
+            id="skipImages" 
+            v-model="skipImages"
+          />
+          <label class="form-check-label" for="skipImages">
+            Ne pas importer les photos
+          </label>
+        </div>
+
         <button class="btn btn-primary" :disabled="isSubmitting">Importer</button>
       </form>
 
@@ -50,7 +62,8 @@ export default {
       isSubmitting: false,
       message: '',
       success: false,
-      validationErrors: []
+      validationErrors: [],
+      skipImages: false
     }
   },
   methods: {
@@ -59,7 +72,8 @@ export default {
       const zipFile = this.$refs.images?.files?.[0] || null
       console.log('[ImportStatic] Soumission reçue', {
         csvNames: csvFiles.map(file => file?.name || ''),
-        zipName: zipFile?.name || ''
+        zipName: zipFile?.name || '',
+        skipImages: this.skipImages
       })
 
       this.isSubmitting = true
@@ -68,7 +82,7 @@ export default {
       this.message = 'Initialisation de l\'importation...'
 
       try {
-        const summary = await runFullImportPipeline({ csvFiles, zipFile }, (stepMessage) => {
+        const summary = await runFullImportPipeline({ csvFiles, zipFile, skipImages: this.skipImages }, (stepMessage) => {
           console.log('[ImportStatic] Progrès :', stepMessage)
           this.message = stepMessage
         })

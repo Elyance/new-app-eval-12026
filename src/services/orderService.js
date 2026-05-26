@@ -1,7 +1,10 @@
 import { xmlToJson, jsonToXml } from '../utils/xmlParser'
 import { getXmlValue, getXmlString } from '../utils/parsing'
 import { API_URL, API_KEY } from '../constants/constant'
-import { createStockMovement } from './stockHelperService'
+import { createStockMovement, getStockAvailable } from './stockHelperService'
+import { addProductToCart, createCart, getCart } from './cartService'
+import { getCustomerAddresses } from './customerService'
+import { calculateCartTotal } from './commandePanierService'
 
 /**
  * Crée un client invité (guest) dans PrestaShop
@@ -397,5 +400,157 @@ export async function getOrderStateById(id_order_state) {
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'état de la commande:', error)
     return null
+  }
+}
+
+export async function duplicateOrderById(orderId, delta) {
+  console.log("On entre dans la fonction duplicateOrderById avec delta:", delta)
+  
+  if (!delta || delta <= 0) {
+    throw new Error('La valeur delta doit être supérieure à 0')
+  }
+
+  try {
+    // 1. Récupérer la commande originale
+    const response = await fetch(`${API_URL}/orders/${orderId}?display=full`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${btoa(`${API_KEY}:`)}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erreur API PrestaShop: ${response.status}`)
+    }
+
+    const xmlData = await response.text()
+    const jsonData = await xmlToJson(xmlData)
+    const order = jsonData?.prestashop?.order
+    if (!order) return null
+
+    console.log("Commande originale récupérée:", order)
+
+    let orderRows = order?.associations?.order_rows?.order_row || []
+    if (!Array.isArray(orderRows)) {
+      orderRows = [orderRows]
+    }
+
+    // 2. Vérifier le stock disponible pour tous les produits
+    console.log("Vérification du stock disponible...")
+    const stockErrors = []
+    
+    for (let row of orderRows) {
+      const productId = getXmlValue(row.product_id)
+      const requiredQty = Number(getXmlValue(row.product_quantity)) * delta
+      
+      try {
+        const stockAvailable = await getStockAvailable(productId)
+        if (!stockAvailable || stockAvailable.length === 0) {
+          stockErrors.push(`Produit ${productId}: Stock indisponible`)
+          continue
+        }
+        
+        const currentQty = Number(getXmlValue(stockAvailable[0].quantity) || 0)
+        if (currentQty < requiredQty) {
+          stockErrors.push(`Produit ${productId}: Stock insuffisant (${currentQty} disponible, ${requiredQty} requis)`)
+        }
+      } catch (err) {
+        console.error(`Erreur vérification stock produit ${productId}:`, err)
+        stockErrors.push(`Produit ${productId}: Erreur lors de la vérification du stock`)
+      }
+    }
+
+    if (stockErrors.length > 0) {
+      throw new Error(`Vérification de stock échouée:\n${stockErrors.join('\n')}`)
+    }
+
+    // 3. Créer les données des produits multipliées
+    const new_rows = []
+    for (let row of orderRows) {
+      const new_product_obj = {
+        product_id: getXmlValue(row.product_id),
+        product_attribute_id: getXmlValue(row.product_attribute_id) || 0,
+        product_quantity: Number(getXmlValue(row.product_quantity)) * delta,
+        product_name: getXmlString(row.product_name),
+        product_reference: getXmlString(row.product_reference) || '',
+        product_price: getXmlValue(row.product_price),
+        unit_price_tax_incl: getXmlValue(row.unit_price_tax_incl),
+        unit_price_tax_excl: getXmlValue(row.unit_price_tax_excl)
+      }
+      new_rows.push(new_product_obj)
+    }
+
+    // 4. Créer le nouveau panier
+    console.log("Création du panier...")
+    const customerId = getXmlValue(order.id_customer)
+    const productData = {
+      id_product: new_rows[0].product_id,
+      id_product_attribute: new_rows[0].product_attribute_id,
+      quantity: new_rows[0].product_quantity
+    }
+    let panier = await createCart(productData, customerId)
+    console.log("Panier créé:", panier)
+
+    // 5. Ajouter les autres produits au panier
+    console.log("Ajout des autres produits au panier...")
+    for (let index = 1; index < new_rows.length; index++) {
+      const productDataForCart = {
+        id_product: new_rows[index].product_id,
+        id_product_attribute: new_rows[index].product_attribute_id,
+        quantity: new_rows[index].product_quantity
+      }
+      panier = await addProductToCart(panier.id, productDataForCart)
+    }
+
+    // 6. Récupérer le panier pour obtenir les informations complètes
+    const fullCart = await getCart(panier.id)
+    console.log("Panier complet récupéré:", fullCart)
+
+    // 7. Récupérer les adresses du client
+    console.log("Récupération des adresses du client...")
+    const addresses = await getCustomerAddresses(customerId)
+    if (addresses.length === 0) {
+      throw new Error('Aucune adresse trouvée pour le client')
+    }
+    const defaultAddress = addresses[0]
+    const idAddress = getXmlValue(defaultAddress.id)
+
+    // 8. Calculer le total du panier
+    console.log("Calcul du total du panier...")
+    const cartTotal = await calculateCartTotal(fullCart)
+
+    // 9. Créer la nouvelle commande
+    console.log("Création de la nouvelle commande...")
+    const orderData = {
+      id_cart: fullCart.id,
+      id_customer: customerId,
+      id_address_delivery: idAddress,
+      id_address_invoice: idAddress,
+      id_currency: order.id_currency["#text"] || 1,
+      id_lang: order.id_lang["#text"] || 1,
+      id_carrier: order.id_carrier["#text"] || 1,
+      module: order.module || 'ps_cashondelivery',
+      payment: order.payment || 'Paiement à la livraison',
+      total_paid: cartTotal || 0,
+      total_paid_tax_incl: cartTotal || 0,
+      total_paid_tax_excl: 0,
+      total_products: new_rows.reduce((sum, row) => sum + row.product_quantity, 0),
+      total_products_wt: cartTotal || 0,
+      secure_key: order.secure_key || ''
+    }
+
+    const newOrder = await createOrder(orderData)
+    console.log("Nouvelle commande créée:", newOrder)
+
+    return {
+      success: true,
+      newPanier: panier,
+      newOrder: newOrder,
+      message: `Commande dupliquée avec succès! ${new_rows.length} produit(s), ${new_rows.reduce((sum, row) => sum + row.product_quantity, 0)} article(s) au total`
+    }
+
+  } catch (error) {
+    console.error('Erreur lors de la duplication de la commande:', error.message)
+    throw error
   }
 }

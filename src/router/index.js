@@ -20,6 +20,8 @@ import Produits from '@/views/BO/Modules/Produits.vue'
 import Statistiques from '@/views/BO/Modules/Statistiques.vue'
 import Login from '@/components/Auth/Login.vue'
 import { setupRouterGuards } from '@/middleware/authGuard'
+import RemoveStock from '@/views/FO/RemoveStock.vue'
+import RemoveStockSummary from '@/views/FO/RemoveStockSummary.vue'
 
 const routes = [
   {
@@ -126,6 +128,18 @@ const routes = [
     path: '/fo/produits',
     name: 'Products',
     component: ProductsPage,
+    meta: { hideSidebar: true }
+  },
+  {
+    path: '/fo/remove',
+    name: 'RemoveStock',
+    component: RemoveStock,
+    meta: { hideSidebar: true }
+  },
+  {
+    path: '/fo/remove-summary/:summary',
+    name: 'RemoveStockSummary',
+    component: RemoveStockSummary,
     meta: { hideSidebar: true }
   },
   {

@@ -50,8 +50,14 @@ const loadCart = async () => {
       cart.rows.map(async (row) => {
         try {
           const product = await getProductDetail(row.id_product)
-          // Calculer le prix final en tenant compte des promotions
-          const pricing = getProductPricingDisplay(product)
+          
+          // Trouver la combinaison sélectionnée
+          const combination = row.id_product_attribute 
+            ? product.combinations?.find(c => c.id == row.id_product_attribute)
+            : null
+
+          // Calculer le prix final en tenant compte des promotions et du prix de la combinaison
+          const pricing = getProductPricingDisplay(product, combination)
 
           return {
             id: row.id_product,
@@ -62,7 +68,7 @@ const loadCart = async () => {
             hasReduction: pricing.hasReduction,
             reductionLabel: pricing.reductionBadgeLabel,
             quantity: row.quantity,
-            image: product?.image || ''
+            image: combination?.image || product?.image || ''
           }
         } catch (err) {
           // En cas d'erreur pour un produit, on affiche quand même la ligne
@@ -96,18 +102,17 @@ onMounted(() => {
   loadCart()
 })
 
-const handleRemoveItem = async (itemId) => {
+const handleRemoveItem = async (productId, attributeId) => {
   const cartId = getIdCartInSessionStorage()
   if (!cartId) return
 
-  const item = cartItems.value.find(i => i.id === itemId)
-  if (!item) return
+  const itemIndex = cartItems.value.findIndex(i => i.id === productId && i.id_product_attribute === attributeId)
+  if (itemIndex === -1) return
+  
+  const item = cartItems.value[itemIndex]
 
   // Retirer localement pour un feedback immédiat
-  const index = cartItems.value.findIndex(i => i.id === itemId)
-  if (index > -1) {
-    cartItems.value.splice(index, 1)
-  }
+  cartItems.value.splice(itemIndex, 1)
 
   // PUT vers PrestaShop (sans la ligne supprimée)
   const result = await removeProductFromCart(cartId, item.id, item.id_product_attribute)
@@ -119,11 +124,11 @@ const handleRemoveItem = async (itemId) => {
   await cartStore.refreshCount()
 }
 
-const handleUpdateQuantity = async (itemId, newQuantity) => {
+const handleUpdateQuantity = async (productId, attributeId, newQuantity) => {
   const cartId = getIdCartInSessionStorage()
   if (!cartId) return
 
-  const item = cartItems.value.find(i => i.id === itemId)
+  const item = cartItems.value.find(i => i.id === productId && i.id_product_attribute === attributeId)
   if (!item) return
 
   // Mettre à jour localement pour un feedback immédiat

@@ -6,6 +6,7 @@ import { getCombinations } from './combinationService'
 import { getProductOptionsStructure } from './productOptionService'
 import { getProductTaxRate } from './taxService'
 import { getSpecificPrices, getProductPricingDisplay } from './specificPricesService'
+import { removeProductFromStock } from './stockHelperService'
 
 /**
  * Récupère la liste des produits depuis PrestaShop
@@ -181,5 +182,47 @@ export async function getProductDetail(productId) {
   } catch (error) {
     console.error('Erreur lors de la récupération du détail produit:', error)
     throw error
+  }
+}
+
+export async function getProductsByCategorie(categorieId) {
+    const products = await getProducts()
+
+    console.log("Resultat des produits : ",  products)
+    
+    // let map = new Map()
+    const listProduct = []
+    for (const item of products) {
+      console.log(item.categorie_id, " ", categorieId) 
+      console.log(item.categorie_id == categorieId)
+      if(item.categorie_id == categorieId) {
+        listProduct.push(item)
+      }
+    }
+    console.log("Final liste product", listProduct)
+    return listProduct
+}
+
+export async function doRemove(productsToRemove, delta) {
+  console.log("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" ,productsToRemove, " and ", delta)
+  
+  let successCount = 0
+  let totalExpected = productsToRemove.length * delta
+  
+  for (let item of productsToRemove) {
+    const result = await removeProductFromStock(item.id, 0, delta)
+    if (result) {
+      successCount++
+    }
+  }
+  
+  const totalRemoved = successCount * delta
+  
+  return {
+    totalExpected,
+    totalRemoved,
+    successCount,
+    totalProducts: productsToRemove.length,
+    delta
   }
 }
