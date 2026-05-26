@@ -1,5 +1,5 @@
 import { xmlToJson } from '@/utils/xmlParser';
-import { API_URL } from '@/constants/constant';
+import { API_URL, API_KEY } from '@/constants/constant';
 
 // Retourne le nom singulier exact utilisé par PrestaShop dans son XML
 function getSingularName(pluralName) {
@@ -21,14 +21,18 @@ export async function resetData(listModules) {
             console.log(`Nombre d'éléments dans ${moduleName} : ${count}`);
         }
     } catch (error) {
-        console.error("Erreur dans resetData: ", error);
-        throw error;
+        console.error("Erreur dans resetData: ", error.message);
+        throw error.message;
     }
 }
 
 export async function resetTable(moduleName) {
     try {
-        const response = await fetch(`${API_URL}/${moduleName}`);
+        const authHeader = { 'Authorization': `Basic ${btoa(`${API_KEY}:`)}`}
+        
+        const response = await fetch(`${API_URL}/${moduleName}`, {
+            headers: authHeader
+        });
         if (!response.ok) {
             throw new Error(`Erreur lors de la récupération du nombre d'éléments : ${response.statusText}`);
         }
@@ -63,7 +67,8 @@ export async function resetTable(moduleName) {
 
             try {
                 const repDelete = await fetch(`${API_URL}/${moduleName}/${id}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: authHeader
                 });
                 if (!repDelete.ok) {
                     console.warn(`[Reset] Impossible de supprimer l'élément ${id} de ${moduleName} (Status: ${repDelete.statusText}). Cet élément est probablement protégé par le système.`);
